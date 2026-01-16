@@ -46,7 +46,7 @@ export function TakoMCPChatbot() {
         required: false,
       },
     ],
-    handler: async ({ query, count = 5, search_effort = "deep" }) => {
+    handler: async ({ query, count = 5, search_effort = "deep" }: { query: string; count?: number; search_effort?: string }) => {
       const response = await fetch("/api/mcp/knowledge_search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -81,7 +81,7 @@ export function TakoMCPChatbot() {
         required: false,
       },
     ],
-    handler: async ({ pub_id, dark_mode = true }) => {
+    handler: async ({ pub_id, dark_mode = true }: { pub_id: string; dark_mode?: boolean }) => {
       const response = await fetch("/api/mcp/open_chart_ui", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -118,7 +118,7 @@ export function TakoMCPChatbot() {
         required: false,
       },
     ],
-    handler: async ({ pub_id, effort = "medium" }) => {
+    handler: async ({ pub_id, effort = "medium" }: { pub_id: string; effort?: string }) => {
       const response = await fetch("/api/mcp/get_card_insights", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
