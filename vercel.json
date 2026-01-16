@@ -1,0 +1,20 @@
+{
+  "buildCommand": "cd frontend && npm install && npm run build",
+  "outputDirectory": "frontend/dist",
+  "installCommand": "pip install -r api/requirements.txt && cd frontend && npm install",
+  "framework": "vite",
+  "rewrites": [
+    {
+      "source": "/api/mcp/knowledge_search",
+      "destination": "/api/knowledge_search"
+    },
+    {
+      "source": "/api/mcp/open_chart_ui",
+      "destination": "/api/open_chart_ui"
+    },
+    {
+      "source": "/api/mcp/get_card_insights",
+      "destination": "/api/get_card_insights"
+    }
+  ]
+}
