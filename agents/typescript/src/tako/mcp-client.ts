@@ -7,32 +7,27 @@
 
 import { MultiServerMCPClient } from "@langchain/mcp-adapters";
 
+// Cache for MCP client initialization to avoid repeated connections
+let mcpCache: { client: MultiServerMCPClient | null; tools: any[] } | null = null;
+let initializationPromise: Promise<{ client: MultiServerMCPClient | null; tools: any[] }> | null = null;
+
 /**
- * Initialize Tako MCP client and load available tools
+ * Initialize Tako MCP client with timeout
  *
- * This function configures the MCP client to connect to Tako's MCP server
- * using StreamableHTTP transport and loads all available tools.
- *
- * @returns {Promise<{client: MultiServerMCPClient, tools: any[]}>}
- *   - client: The initialized MCP client
- *   - tools: Array of LangChain-compatible tools from Tako MCP server
+ * @param timeoutMs Timeout in milliseconds (default: 3000ms)
  */
-export async function initializeTakoMCP() {
-  // Get Tako MCP server URL and API token from environment
-  const takoMcpUrl = process.env.TAKO_MCP_URL || "http://localhost:8002";
+async function initializeWithTimeout(timeoutMs = 3000) {
+  const takoMcpUrl = process.env.TAKO_MCP_URL || "http://localhost:8001";
   const takoApiToken = process.env.TAKO_API_TOKEN;
 
   if (!takoApiToken) {
-    console.warn(
-      "TAKO_API_TOKEN not set - Tako MCP integration will be unavailable"
-    );
+    console.warn("TAKO_API_TOKEN not set - Tako MCP integration will be unavailable");
     return { client: null, tools: [] };
   }
 
-  // Configure MCP servers
   const mcpServers = {
     tako: {
-      transport: "streamable_http" as const,
+      transport: "http" as const,
       url: takoMcpUrl,
       headers: {
         "Content-Type": "application/json",
@@ -41,25 +36,65 @@ export async function initializeTakoMCP() {
     },
   };
 
+  // Create timeout promise
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    setTimeout(() => reject(new Error(`Tako MCP initialization timed out after ${timeoutMs}ms`)), timeoutMs);
+  });
+
   try {
-    // Initialize the MCP client
     const client = new MultiServerMCPClient({
       mcpServers,
-      throwOnLoadError: false, // Graceful degradation if Tako unavailable
-      prefixToolNameWithServerName: true, // Tools named "tako_knowledge_search", etc.
-      useStandardContentBlocks: true, // Use standard MCP content blocks
+      throwOnLoadError: false,
+      prefixToolNameWithServerName: true,
+      useStandardContentBlocks: true,
     });
 
-    // Load tools from MCP server
     console.log("Loading Tako MCP tools from:", takoMcpUrl);
-    const tools = await client.getTools();
-    console.log(`Loaded ${tools.length} Tako MCP tools:`, tools.map(t => t.name));
 
+    // Race between getTools and timeout
+    const tools = await Promise.race([
+      client.getTools(),
+      timeoutPromise
+    ]);
+
+    console.log(`Loaded ${tools.length} Tako MCP tools:`, tools.map(t => t.name));
     return { client, tools };
   } catch (error) {
-    console.error("Failed to initialize Tako MCP client:", error);
-    // Return empty tools array on error to allow graceful degradation
+    console.warn("Failed to initialize Tako MCP client (will continue without Tako):", error.message);
     return { client: null, tools: [] };
+  }
+}
+
+/**
+ * Initialize Tako MCP client and load available tools
+ *
+ * This function configures the MCP client to connect to Tako's MCP server
+ * using StreamableHTTP transport and loads all available tools.
+ * Results are cached to avoid repeated initialization.
+ *
+ * @returns {Promise<{client: MultiServerMCPClient | null, tools: any[]}>}
+ *   - client: The initialized MCP client (or null if unavailable)
+ *   - tools: Array of LangChain-compatible tools from Tako MCP server (or empty array)
+ */
+export async function initializeTakoMCP() {
+  // Return cached result if available
+  if (mcpCache) {
+    return mcpCache;
+  }
+
+  // Return in-progress initialization if it exists
+  if (initializationPromise) {
+    return initializationPromise;
+  }
+
+  // Start new initialization
+  initializationPromise = initializeWithTimeout(3000);
+
+  try {
+    mcpCache = await initializationPromise;
+    return mcpCache;
+  } finally {
+    initializationPromise = null;
   }
 }
 

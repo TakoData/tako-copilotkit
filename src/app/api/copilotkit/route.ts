@@ -22,7 +22,7 @@ export const POST = async (req: NextRequest) => {
     searchParams.get("lgcDeploymentUrl") || process.env.LGC_DEPLOYMENT_URL;
 
   const baseUrl =
-    process.env.REMOTE_ACTION_URL || "http://localhost:8000/copilotkit";
+    process.env.REMOTE_ACTION_URL || "http://localhost:2024/copilotkit";
 
   let runtime = new CopilotRuntime({
     agents: {
