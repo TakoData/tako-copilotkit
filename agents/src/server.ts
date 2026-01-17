@@ -22,9 +22,34 @@ if (USE_LOCAL_AGENT) {
     try {
       const result = await graph.invoke(req.body);
       res.json(result);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Agent error:", error);
-      res.status(500).json({ error: String(error) });
+
+      // Check if it's an OpenAI quota/rate limit error
+      if (error.message?.includes('exceeded your current quota') ||
+          error.message?.includes('429') ||
+          error.status === 429) {
+        return res.status(429).json({
+          error: 'OpenAI API quota exceeded. Please check your API key and billing details.',
+          details: String(error)
+        });
+      }
+
+      // Check if it's an OpenAI authentication error
+      if (error.message?.includes('Incorrect API key') ||
+          error.message?.includes('401') ||
+          error.status === 401) {
+        return res.status(401).json({
+          error: 'Invalid OpenAI API key. Please check your configuration.',
+          details: String(error)
+        });
+      }
+
+      // Generic error fallback
+      res.status(500).json({
+        error: 'Internal server error',
+        details: String(error)
+      });
     }
   });
 } else {
@@ -47,7 +72,7 @@ if (USE_LOCAL_AGENT) {
   });
 }
 
-const PORT = process.env.PORT || 8000;
+const PORT = process.env.PORT || 8002;
 app.listen(PORT, () => {
   console.log(`Agent server running on http://localhost:${PORT}`);
   console.log(`Mode: ${USE_LOCAL_AGENT ? "Local" : "Production"}`);

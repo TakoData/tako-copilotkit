@@ -2,11 +2,17 @@ import { useCoAgentStateRender } from "@copilotkit/react-core";
 import { TakoResearchState } from "../lib/types";
 
 export function Progress() {
-  const { state } = useCoAgentStateRender<TakoResearchState>({
+  const renderState = useCoAgentStateRender<TakoResearchState>({
     name: "tako_research_agent",
     render: ({ state }) => state,
   });
 
+  // Handle case where hook returns undefined before agent is ready
+  if (!renderState) {
+    return null;
+  }
+
+  const { state } = renderState;
   const logs = state?.logs || [];
 
   if (logs.length === 0) {

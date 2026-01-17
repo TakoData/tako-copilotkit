@@ -4,7 +4,7 @@ import { CopilotKit } from "@copilotkit/react-core";
 import { Main } from "./components/Main";
 import "./index.css";
 
-const AGENT_URL = import.meta.env.VITE_AGENT_URL || "http://localhost:8000/copilotkit";
+const AGENT_URL = import.meta.env.VITE_AGENT_URL || "http://localhost:8002/copilotkit";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

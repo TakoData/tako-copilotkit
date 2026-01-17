@@ -1,5 +1,6 @@
 import { TakoResearchState } from "./state";
 import { copilotkitEmitState } from "@copilotkit/sdk-js/langchain";
+import { searchTavilyWeb } from "./tavily";
 
 const TAKO_API_BASE = process.env.TAKO_API_BASE || "http://localhost:3000/api/mcp";
 const TAKO_API_TOKEN = process.env.TAKO_API_TOKEN || "";
@@ -79,15 +80,22 @@ export async function search_node(state: TakoResearchState) {
 
   // Search for each data question
   for (const question of state.data_questions || []) {
-    newLogs.push(`Searching Tako for: "${question}"`);
+    newLogs.push(`Searching Tako and Web for: "${question}"`);
 
-    const results = await searchTakoCharts(question, 3);
-    newLogs.push(`Found ${results.length} charts for "${question}"`);
+    // Run searches in parallel
+    const [takoResults, tavilyResults] = await Promise.all([
+      searchTakoCharts(question, 3),
+      searchTavilyWeb(question, 3)
+    ]);
 
-    // Get iframe HTML for each result
-    for (const result of results) {
-      // Check if we already have this resource
-      if (newResources.some(r => r.card_id === result.card_id)) {
+    newLogs.push(
+      `Found ${takoResults.length} charts, ${tavilyResults.length} web results`
+    );
+
+    // Process Tako charts
+    for (const result of takoResults) {
+      // Check if we already have this resource by URL
+      if (newResources.some(r => r.url === result.url)) {
         continue;
       }
 
@@ -97,16 +105,35 @@ export async function search_node(state: TakoResearchState) {
       newResources.push({
         ...result,
         iframe_html,
+        resource_type: 'tako_chart',
       });
     }
-  }
 
-  // Emit intermediate state
-  await config.saveState({
-    ...state,
-    logs: newLogs,
-    resources: newResources,
-  });
+    // Process Tavily web results
+    for (const result of tavilyResults) {
+      // Check if we already have this resource by URL
+      if (newResources.some(r => r.url === result.url)) {
+        continue;
+      }
+
+      newLogs.push(`Adding web result: ${result.title}`);
+      newResources.push({
+        title: result.title,
+        description: result.content.substring(0, 300) + '...',
+        source: 'Tavily Web Search',
+        url: result.url,
+        content: result.content,
+        resource_type: 'tavily_web',
+      });
+    }
+
+    // Emit intermediate state after each question
+    await config.saveState({
+      ...state,
+      logs: newLogs,
+      resources: newResources,
+    });
+  }
 
   return {
     logs: newLogs,
