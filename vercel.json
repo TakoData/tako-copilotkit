@@ -1,14 +1,9 @@
 {
-  "version": 2,
-  "buildCommand": "cd frontend && npm install && npm run build && cd ../agents && npm install --legacy-peer-deps && npm run build",
+  "buildCommand": "cd frontend && npm install && npm run build",
   "outputDirectory": "frontend/dist",
-  "installCommand": "pip install -r api/requirements.txt",
+  "installCommand": "pip install -r api/requirements.txt && cd frontend && npm install",
   "framework": "vite",
   "rewrites": [
-    {
-      "source": "/api/copilotkit",
-      "destination": "/api/copilotkit-handler.js"
-    },
     {
       "source": "/api/mcp/knowledge_search",
       "destination": "/api/knowledge_search"
@@ -21,11 +16,5 @@
       "source": "/api/mcp/get_card_insights",
       "destination": "/api/get_card_insights"
     }
-  ],
-  "functions": {
-    "api/copilotkit-handler.js": {
-      "runtime": "nodejs20.x",
-      "maxDuration": 60
-    }
-  }
+  ]
 }

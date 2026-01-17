@@ -1,9 +1,0 @@
-# Don't upload these to Vercel
-node_modules
-.env
-.env.local
-*.log
-.DS_Store
-backend
-*.md
-!README.md
