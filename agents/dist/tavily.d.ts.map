@@ -1,0 +1,1 @@
+{"version":3,"file":"tavily.d.ts","sourceRoot":"","sources":["../src/tavily.ts"],"names":[],"mappings":"AAIA,MAAM,WAAW,kBAAkB;IACjC,KAAK,EAAE,MAAM,CAAC;IACd,GAAG,EAAE,MAAM,CAAC;IACZ,OAAO,EAAE,MAAM,CAAC;IAChB,KAAK,EAAE,MAAM,CAAC;CACf;AAED,wBAAsB,eAAe,CACnC,KAAK,EAAE,MAAM,EACb,UAAU,GAAE,MAAU,GACrB,OAAO,CAAC,kBAAkB,EAAE,CAAC,CAuB/B"}
