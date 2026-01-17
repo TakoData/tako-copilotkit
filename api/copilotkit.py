@@ -9,7 +9,7 @@ import httpx
 
 # For local development, use langgraph server
 # For production, you'd deploy the agent and point here
-AGENT_URL = os.environ.get("AGENT_URL", "http://localhost:8002")
+AGENT_URL = os.environ.get("AGENT_URL", "http://localhost:8000")
 
 
 class handler(BaseHTTPRequestHandler):

@@ -50,29 +50,27 @@ export async function chat_node(state: TakoResearchState) {
     },
   });
 
-  const systemMessage = `You are a research assistant that helps users create data-driven research reports using Tako charts and web resources.
+  const systemMessage = `You are a research assistant that helps users create data-driven research reports using Tako charts.
 
 Your workflow:
 1. When the user provides a research topic, use WriteResearchQuestion to set it
-2. Use GenerateDataQuestions to create 3-5 specific data questions
-3. After resources are fetched (both Tako charts and web results), use WriteReport
+2. Use GenerateDataQuestions to create 3-5 specific data questions that can be answered with Tako charts
+3. After charts are fetched, use WriteReport to create a comprehensive report
 
 When writing reports:
 - Use markdown formatting
-- Embed Tako chart iframes using the iframe_html from tako_chart resources
-- Reference web sources with links from tavily_web resources
-- Combine visual data (charts) with contextual information (web results)
+- Embed chart iframes using the iframe_html from resources
+- Reference chart titles and sources
 - Organize information logically
-- Include a Resources section categorizing charts and web sources separately
+- Include a Resources section at the end with chart metadata
 
 Current state:
 - Research question: ${state.research_question || "Not set"}
 - Data questions: ${state.data_questions?.length || 0} generated
-- Tako Charts: ${state.resources?.filter(r => r.resource_type === 'tako_chart').length || 0}
-- Web Resources: ${state.resources?.filter(r => r.resource_type === 'tavily_web').length || 0}
+- Resources: ${state.resources?.length || 0} charts available
 - Report: ${state.report ? "Draft created" : "Not started"}
 
-Be concise and create reports that blend visual data insights with supporting web context.`;
+Be concise and focused on helping the user create a data-rich research report.`;
 
   const tools = [
     WriteResearchQuestionTool,
