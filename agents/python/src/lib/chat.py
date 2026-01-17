@@ -33,6 +33,11 @@ def DeleteResources(urls: List[str]):  # pylint: disable=invalid-name,unused-arg
     """Delete the URLs from the resources."""
 
 
+@tool
+def GenerateDataQuestions(questions: List[str]):  # pylint: disable=invalid-name,unused-argument
+    """Generate 3-5 data-focused questions to search Tako's knowledge base for relevant charts and visualizations."""
+
+
 async def chat_node(
     state: AgentState, config: RunnableConfig
 ) -> Command[Literal["search_node", "chat_node", "delete_node", "__end__"]]:
@@ -52,6 +57,11 @@ async def chat_node(
                 "state_key": "research_question",
                 "tool": "WriteResearchQuestion",
                 "tool_argument": "research_question",
+            },
+            {
+                "state_key": "data_questions",
+                "tool": "GenerateDataQuestions",
+                "tool_argument": "questions",
             },
         ],
     )
@@ -80,6 +90,7 @@ async def chat_node(
             WriteReport,
             WriteResearchQuestion,
             DeleteResources,
+            GenerateDataQuestions,
         ],
         **ainvoke_kwargs,  # Pass the kwargs conditionally
     ).ainvoke(
@@ -88,6 +99,13 @@ async def chat_node(
                 content=f"""
             You are a research assistant. You help the user with writing a research report.
             Do not recite the resources, instead use them to answer the user's question.
+
+            TAKO INTEGRATION WORKFLOW:
+            1. When you receive a research question, first use GenerateDataQuestions to create 3-5 data-focused questions
+            2. These questions will be used to search Tako's knowledge base for relevant charts and visualizations
+            3. Then use the Search tool for web resources
+            4. Combine insights from both Tako charts and web resources in your report
+
             You should use the search tool to get resources before answering the user's question.
             If you finished writing the report, ask the user proactively for next steps, changes etc, make it engaging.
             To write the report, you should use the WriteReport tool. Never EVER respond with the report, only use the tool.
@@ -144,11 +162,27 @@ async def chat_node(
             )
 
     goto = "__end__"
-    if ai_message.tool_calls and ai_message.tool_calls[0]["name"] == "Search":
-        goto = "search_node"
-    elif (
-        ai_message.tool_calls and ai_message.tool_calls[0]["name"] == "DeleteResources"
-    ):
-        goto = "delete_node"
+    if ai_message.tool_calls:
+        tool_name = ai_message.tool_calls[0]["name"]
+        if tool_name == "Search":
+            goto = "search_node"
+        elif tool_name == "DeleteResources":
+            goto = "delete_node"
+        elif tool_name == "GenerateDataQuestions":
+            # Store data questions and route to search
+            data_questions = ai_message.tool_calls[0]["args"].get("questions", [])
+            return Command(
+                goto="search_node",
+                update={
+                    "data_questions": data_questions,
+                    "messages": [
+                        ai_message,
+                        ToolMessage(
+                            tool_call_id=ai_message.tool_calls[0]["id"],
+                            content=f"Generated {len(data_questions)} data questions for Tako search.",
+                        ),
+                    ],
+                },
+            )
 
     return Command(goto=goto, update={"messages": response})
