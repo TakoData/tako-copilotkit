@@ -106,9 +106,9 @@ export function ResearchCanvas() {
   });
   const [isAddResourceOpen, setIsAddResourceOpen] = useState(false);
   const [selectedChart, setSelectedChart] = useState<Resource | null>(null);
-  const [isViewMode, setIsViewMode] = useState(false);
-  const [chartsExpanded, setChartsExpanded] = useState(true);
-  const [webExpanded, setWebExpanded] = useState(true);
+  const [isViewMode, setIsViewMode] = useState(true);  // Default to preview mode
+  const [chartsExpanded, setChartsExpanded] = useState(false);  // Default collapsed
+  const [webExpanded, setWebExpanded] = useState(false);  // Default collapsed
 
   const addResource = () => {
     if (newResource.url) {

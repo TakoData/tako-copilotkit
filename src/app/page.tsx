@@ -12,7 +12,6 @@ export default function ModelSelectorWrapper() {
   return (
     <ModelSelectorProvider>
       <Home />
-      <ModelSelector />
     </ModelSelectorProvider>
   );
 }

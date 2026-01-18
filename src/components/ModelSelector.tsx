@@ -14,10 +14,10 @@ export function ModelSelector() {
   const { model, setModel } = useModelSelectorContext();
 
   return (
-    <div className="fixed bottom-0 left-0 p-4 z-50">
+    <div className="p-3 border-b border-gray-200">
       <Select value={model} onValueChange={(v) => setModel(v)}>
-        <SelectTrigger className="w-[180px]">
-          <SelectValue placeholder="Theme" />
+        <SelectTrigger className="w-full">
+          <SelectValue placeholder="Select Model" />
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="openai">OpenAI</SelectItem>

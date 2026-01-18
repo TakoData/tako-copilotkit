@@ -4,6 +4,8 @@ import { AgentState } from "@/lib/types";
 import { useCoAgent } from "@copilotkit/react-core";
 import { CopilotChat } from "@copilotkit/react-ui";
 import { useCopilotChatSuggestions } from "@copilotkit/react-ui";
+import { Group, Panel, Separator } from "react-resizable-panels";
+import { GripVertical } from "lucide-react";
 
 export default function Main() {
   const { model, agent } = useModelSelectorContext();
@@ -28,39 +30,65 @@ export default function Main() {
         Research Helper
       </h1>
 
-      <div
-        className="flex flex-1 border"
+      <Group
+        orientation="horizontal"
+        className="border"
         style={{ height: "calc(100vh - 60px)" }}
       >
-        <div className="flex-1 overflow-hidden">
-          <ResearchCanvas />
-        </div>
-        <div
-          className="w-[500px] h-full flex-shrink-0"
-          style={
-            {
-              "--copilot-kit-background-color": "#E0E9FD",
-              "--copilot-kit-secondary-color": "#6766FC",
-              "--copilot-kit-separator-color": "#b8b8b8",
-              "--copilot-kit-primary-color": "#FFFFFF",
-              "--copilot-kit-contrast-color": "#000000",
-              "--copilot-kit-secondary-contrast-color": "#000",
-            } as any
-          }
+        {/* Chat on Left */}
+        <Panel
+          defaultSize={40}
+          minSize={30}
+          maxSize={70}
+          id="chat-panel"
         >
-          <CopilotChat
-            className="h-full"
-            onSubmitMessage={async (message) => {
-              // clear the logs before starting the new research
-              setState({ ...state, logs: [] });
-              await new Promise((resolve) => setTimeout(resolve, 30));
-            }}
-            labels={{
-              initial: "Hi! How can I assist you with your research today?",
-            }}
-          />
-        </div>
-      </div>
+          <div
+            style={
+              {
+                "--copilot-kit-background-color": "#E0E9FD",
+                "--copilot-kit-secondary-color": "#6766FC",
+                "--copilot-kit-separator-color": "#b8b8b8",
+                "--copilot-kit-primary-color": "#FFFFFF",
+                "--copilot-kit-contrast-color": "#000000",
+                "--copilot-kit-secondary-contrast-color": "#000",
+              } as any
+            }
+            className="h-full overflow-hidden"
+          >
+            <CopilotChat
+              className="h-full"
+              onSubmitMessage={async (message) => {
+                setState({ ...state, logs: [] });
+                await new Promise((resolve) => setTimeout(resolve, 30));
+              }}
+              labels={{
+                initial: "Hi! How can I assist you with your research today?",
+              }}
+            />
+          </div>
+        </Panel>
+
+        {/* Resizable Divider */}
+        <Separator
+          id="resize-separator"
+          className="flex items-center justify-center bg-gray-300 hover:bg-[#6766FC] transition-colors cursor-col-resize"
+          style={{ width: "12px" }}
+        >
+          <GripVertical className="w-6 h-6 text-gray-600" />
+        </Separator>
+
+        {/* Canvas on Right */}
+        <Panel
+          defaultSize={60}
+          minSize={30}
+          maxSize={70}
+          id="canvas-panel"
+        >
+          <div className="h-full overflow-hidden">
+            <ResearchCanvas />
+          </div>
+        </Panel>
+      </Group>
     </>
   );
 }

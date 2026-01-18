@@ -190,7 +190,10 @@ async def chat_node(
             def replace_chart_marker(match):
                 chart_title = match.group(1).strip()
                 if chart_title in tako_charts_map:
-                    return "\n\n" + tako_charts_map[chart_title] + "\n\n"
+                    iframe_html = tako_charts_map[chart_title]
+                    # Remove script tags - resize listener is handled in React component
+                    iframe_only = re.sub(r'<script.*?</script>', '', iframe_html, flags=re.DOTALL)
+                    return "\n\n" + iframe_only + "\n\n"
                 else:
                     # Chart not found, leave marker but add warning
                     return f"\n\n[Chart not found: {chart_title}]\n\n"
@@ -202,6 +205,7 @@ async def chat_node(
                 goto="chat_node",
                 update={
                     "report": processed_report,
+                    "resources": state.get("resources", []),  # Preserve resources
                     "messages": [
                         ai_message,
                         ToolMessage(

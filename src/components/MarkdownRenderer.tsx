@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
@@ -9,6 +10,28 @@ interface MarkdownRendererProps {
 }
 
 export function MarkdownRenderer({ content }: MarkdownRendererProps) {
+  // Listen for Tako chart resize messages
+  useEffect(() => {
+    const handleTakoResize = (event: MessageEvent) => {
+      const data = event.data;
+
+      // Early return if not a Tako resize message
+      if (data.type !== "tako::resize") return;
+
+      // Find and resize the iframe that sent this message
+      const iframes = document.querySelectorAll("iframe");
+      for (const iframe of iframes) {
+        if (iframe.contentWindow === event.source) {
+          iframe.style.height = `${data.height}px`;
+          break;
+        }
+      }
+    };
+
+    window.addEventListener("message", handleTakoResize);
+    return () => window.removeEventListener("message", handleTakoResize);
+  }, [content]);
+
   return (
     <div className="prose prose-slate max-w-none bg-background px-6 py-8 border-0 shadow-none rounded-xl">
       <ReactMarkdown
@@ -70,6 +93,14 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
               />
             );
           },
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          iframe: ({ node, ...props }) => (
+            <iframe
+              {...props}
+              className="w-full border-0 rounded-lg mb-6"
+              style={{ minHeight: "400px" }}
+            />
+          ),
         }}
       >
         {content}
