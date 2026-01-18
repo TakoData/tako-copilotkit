@@ -9,6 +9,24 @@ body {
   overflow: hidden;
 }
 
+/* react-split styles */
+.gutter {
+  background-color: #e5e7eb;
+  background-repeat: no-repeat;
+  background-position: 50%;
+  cursor: col-resize;
+  position: relative;
+  transition: background-color 0.2s ease;
+}
+
+.gutter:hover {
+  background-color: #d1d5db;
+}
+
+.gutter.gutter-horizontal {
+  cursor: col-resize;
+}
+
 @layer utilities {
   .text-balance {
     text-wrap: balance;

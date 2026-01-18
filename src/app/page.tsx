@@ -28,8 +28,10 @@ function Home() {
       }`;
 
   return (
-    <CopilotKit runtimeUrl={runtimeUrl} showDevConsole={false} agent={agent}>
-      <Main />
-    </CopilotKit>
+    <div style={{ height: "100vh", overflow: "hidden" }}>
+      <CopilotKit runtimeUrl={runtimeUrl} showDevConsole={false} agent={agent}>
+        <Main />
+      </CopilotKit>
+    </div>
   );
 }
