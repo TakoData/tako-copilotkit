@@ -1,5 +1,7 @@
 {
   "framework": "nextjs",
+  "installCommand": "npm install",
+  "buildCommand": "npm run build",
   "rewrites": [
     {
       "source": "/api/mcp/knowledge_search",
