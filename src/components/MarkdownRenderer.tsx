@@ -77,20 +77,26 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
             />
           ),
           // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          code: ({ node, inline, ...props }) => {
-            if (inline) {
+          code: ({ node, className, children, ...props }) => {
+            // If there's a className with language-, it's a code block
+            const isCodeBlock = className?.includes("language-");
+            if (!isCodeBlock) {
               return (
                 <code
                   className="bg-gray-100 px-1.5 py-0.5 rounded text-sm font-mono"
                   {...props}
-                />
+                >
+                  {children}
+                </code>
               );
             }
             return (
               <code
                 className="block bg-gray-100 p-4 rounded-lg text-sm font-mono overflow-x-auto mb-4"
                 {...props}
-              />
+              >
+                {children}
+              </code>
             );
           },
           // eslint-disable-next-line @typescript-eslint/no-unused-vars
