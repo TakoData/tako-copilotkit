@@ -20,6 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { MarkdownRenderer } from "./MarkdownRenderer";
 
 export function ResearchCanvas() {
   const { model, agent } = useModelSelectorContext();
@@ -104,6 +105,7 @@ export function ResearchCanvas() {
   });
   const [isAddResourceOpen, setIsAddResourceOpen] = useState(false);
   const [selectedChart, setSelectedChart] = useState<Resource | null>(null);
+  const [isViewMode, setIsViewMode] = useState(false);
 
   const addResource = () => {
     if (newResource.url) {
@@ -161,15 +163,18 @@ export function ResearchCanvas() {
           <h2 className="text-lg font-medium mb-3 text-primary">
             Research Question
           </h2>
-          <Input
-            placeholder="Enter your research question"
-            value={state.research_question || ""}
-            onChange={(e) =>
-              setState({ ...state, research_question: e.target.value })
-            }
+          <div
+            className="bg-background px-6 py-8 border-0 shadow-none rounded-xl text-md font-extralight min-h-[60px] flex items-center"
             aria-label="Research question"
-            className="bg-background px-6 py-8 border-0 shadow-none rounded-xl text-md font-extralight focus-visible:ring-0 placeholder:text-slate-400"
-          />
+          >
+            {state.research_question ? (
+              <p className="text-foreground">{state.research_question}</p>
+            ) : (
+              <p className="text-slate-400">
+                The agent will automatically identify your research question from your query...
+              </p>
+            )}
+          </div>
         </div>
 
         <div>
@@ -233,19 +238,48 @@ export function ResearchCanvas() {
         </Dialog>
 
         <div className="flex flex-col h-full">
-          <h2 className="text-lg font-medium mb-3 text-primary">
-            Research Draft
-          </h2>
-          <Textarea
-            data-test-id="research-draft"
-            placeholder="Write your research draft here"
-            value={state.report || ""}
-            onChange={(e) => setState({ ...state, report: e.target.value })}
-            rows={10}
-            aria-label="Research draft"
-            className="bg-background px-6 py-8 border-0 shadow-none rounded-xl text-md font-extralight focus-visible:ring-0 placeholder:text-slate-400"
-            style={{ minHeight: "200px" }}
-          />
+          <div className="flex justify-between items-center mb-3">
+            <h2 className="text-lg font-medium text-primary">
+              Research Draft
+            </h2>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setIsViewMode(false)}
+                className={`px-4 py-2 rounded text-sm font-medium transition-colors ${
+                  !isViewMode
+                    ? "bg-[#6766FC] text-white"
+                    : "text-gray-600 hover:bg-gray-100"
+                }`}
+              >
+                Edit
+              </button>
+              <button
+                onClick={() => setIsViewMode(true)}
+                className={`px-4 py-2 rounded text-sm font-medium transition-colors ${
+                  isViewMode
+                    ? "bg-[#6766FC] text-white"
+                    : "text-gray-600 hover:bg-gray-100"
+                }`}
+              >
+                Preview
+              </button>
+            </div>
+          </div>
+
+          {isViewMode ? (
+            <MarkdownRenderer content={state.report || ""} />
+          ) : (
+            <Textarea
+              data-test-id="research-draft"
+              placeholder="Write your research draft here"
+              value={state.report || ""}
+              onChange={(e) => setState({ ...state, report: e.target.value })}
+              rows={10}
+              aria-label="Research draft"
+              className="bg-background px-6 py-8 border-0 shadow-none rounded-xl text-md font-extralight focus-visible:ring-0 placeholder:text-slate-400"
+              style={{ minHeight: "200px" }}
+            />
+          )}
         </div>
       </div>
     </div>

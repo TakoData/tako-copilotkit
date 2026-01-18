@@ -131,6 +131,20 @@ async def search_node(state: AgentState, config: RunnableConfig):
         state["logs"][log_index]["done"] = True
         await copilotkit_emit_state(config, state)
 
+    # Deduplicate Tako charts by title (same chart may appear in multiple searches)
+    seen_titles = {}
+    deduped_tako = []
+    for chart in tako_results:
+        if isinstance(chart, dict):
+            title = chart.get("title", "")
+            if title and title not in seen_titles:
+                seen_titles[title] = True
+                deduped_tako.append(chart)
+            elif not title:  # Keep charts without titles
+                deduped_tako.append(chart)
+    tako_results = deduped_tako
+    print(f"Deduplicated Tako results: {len(deduped_tako)} unique charts")
+
     config = copilotkit_customize_config(
         config,
         emit_intermediate_state=[

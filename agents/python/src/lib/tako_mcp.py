@@ -87,17 +87,37 @@ async def call_tako_knowledge_search(
 
 async def get_tako_chart_iframe(card_id: str) -> Optional[str]:
     """
-    Get iframe HTML for a Tako chart.
+    Get iframe HTML for a Tako chart with dynamic resizing.
 
     Args:
         card_id: Tako card ID
 
     Returns:
-        Iframe HTML string or None if failed
+        Iframe HTML string with resizing script or None if failed
     """
-    # Generate iframe HTML directly - Tako charts are publicly accessible
+    # Generate iframe HTML with dynamic resizing script
     tako_base_url = "https://trytako.com"
-    iframe_html = f'<iframe src="{tako_base_url}/card/{card_id}" width="900" height="600" frameborder="0"></iframe>'
+    iframe_html = f'''<iframe 
+  width="100%" 
+  src="{tako_base_url}/card/{card_id}" 
+  scrolling="no" 
+  frameborder="0"
+></iframe>
 
-    print(f"✓ Generated iframe for card_id: {card_id}")
+<script type="text/javascript">
+!function() {{
+  "use strict";
+  window.addEventListener("message", function(e) {{
+    const d = e.data;
+    if (d.type !== "tako::resize") return;
+    
+    for (let iframe of document.querySelectorAll("iframe")) {{
+      if (iframe.contentWindow !== e.source) continue;
+      iframe.style.height = d.height + "px";
+    }}
+  }});
+}}();
+</script>'''
+
+    print(f"✓ Generated iframe with dynamic resizing for card_id: {card_id}")
     return iframe_html
