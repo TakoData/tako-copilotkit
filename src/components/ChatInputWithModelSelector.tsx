@@ -2,7 +2,14 @@
 
 import { ModelSelector } from "./ModelSelector";
 import { useState } from "react";
-import type { InputProps } from "@copilotkit/react-ui/dist/components/chat/props";
+
+interface InputProps {
+  inProgress: boolean;
+  onSend: (message: string) => Promise<void>;
+  chatReady?: boolean;
+  onStop?: () => void;
+  hideStopButton?: boolean;
+}
 
 export function ChatInputWithModelSelector({
   inProgress,
