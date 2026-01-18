@@ -46,26 +46,22 @@ async def call_tako_knowledge_search(
 
             if response.status_code == 200:
                 data = response.json()
-                # Tako API returns results in outputs.knowledge_cards
                 knowledge_cards = data.get("outputs", {}).get("knowledge_cards", [])
-
-                # Convert to our format
                 formatted_results = []
                 for card in knowledge_cards:
                     card_id = card.get("card_id")
                     title = card.get("title", "")
                     description = card.get("description", "")
-
-                    # Create Tako chart URL
-                    url = f"https://trytako.com/card/{card_id}" if card_id else ""
+                    embed_url = card.get("embed_url", "")
 
                     formatted_results.append({
                         "type": "tako_chart",
-                        "content": description[:200],  # First 200 chars
-                        "pub_id": card_id,  # Using card_id as pub_id
+                        "content": description,
+                        "pub_id": card_id,
+                        "embed_url": embed_url,
                         "title": title,
                         "description": description,
-                        "url": url
+                        "url": embed_url
                     })
 
                 print(f"✓ Tako search succeeded for '{query}': {len(formatted_results)} results")
@@ -85,7 +81,7 @@ async def call_tako_knowledge_search(
         return []
 
 
-async def get_tako_chart_iframe(card_id: str) -> Optional[str]:
+async def get_tako_chart_iframe(embed_url: str) -> Optional[str]:
     """
     Get iframe HTML for a Tako chart with dynamic resizing.
 
@@ -96,10 +92,9 @@ async def get_tako_chart_iframe(card_id: str) -> Optional[str]:
         Iframe HTML string with resizing script or None if failed
     """
     # Generate iframe HTML with dynamic resizing script
-    tako_base_url = "https://trytako.com"
     iframe_html = f'''<iframe 
   width="100%" 
-  src="{tako_base_url}/card/{card_id}" 
+  src="{embed_url}" 
   scrolling="no" 
   frameborder="0"
 ></iframe>
@@ -119,5 +114,4 @@ async def get_tako_chart_iframe(card_id: str) -> Optional[str]:
 }}();
 </script>'''
 
-    print(f"✓ Generated iframe with dynamic resizing for card_id: {card_id}")
     return iframe_html

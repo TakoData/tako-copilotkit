@@ -1,5 +1,6 @@
 """Chat Node"""
 
+import re
 from typing import List, Literal, cast
 
 from copilotkit.langgraph import copilotkit_customize_config
@@ -71,12 +72,34 @@ async def chat_node(
     report = state.get("report", "")
 
     resources = []
+    tako_charts_map = {}
+    available_tako_titles = []
 
     for resource in state["resources"]:
-        content = get_resource(resource["url"])
-        if content == "ERROR":
-            continue
-        resources.append({**resource, "content": content})
+        # Tako charts already have descriptions, don't fetch content
+        if resource.get("resource_type") == "tako_chart":
+            title = resource.get("title", "")
+            iframe_html = resource.get("iframe_html", "")
+            description = resource.get("description", "")
+
+            # Add to resources with description as content
+            resources.append({
+                **resource,
+                "content": description
+            })
+
+            # Build Tako charts map for post-processing
+            if title and iframe_html:
+                tako_charts_map[title] = iframe_html
+                available_tako_titles.append(f"  - {title}")
+        else:
+            # Web resources: fetch content
+            content = get_resource(resource["url"])
+            if content == "ERROR":
+                continue
+            resources.append({**resource, "content": content})
+
+    available_tako_titles_str = "\n".join(available_tako_titles) if available_tako_titles else "  (No Tako charts available yet)"
 
     model = get_model(state)
     # Prepare the kwargs for the ainvoke method
@@ -113,26 +136,32 @@ async def chat_node(
             - If a research question is already provided, YOU MUST NOT ASK FOR IT AGAIN
 
             CRITICAL - EMBEDDING TAKO CHARTS IN REPORT:
-            When writing your report with the WriteReport tool, you MUST embed Tako chart visualizations directly.
-            For each Tako chart resource (resource_type='tako_chart'), include its iframe_html in the report where relevant.
+            When writing your report, you can embed Tako chart visualizations using markers.
 
-            Format example:
+            SYNTAX: [TAKO_CHART:exact_title_of_chart]
+
+            AVAILABLE TAKO CHARTS:
+{available_tako_titles_str}
+
+            EXAMPLE:
             ## Economic Growth Analysis
 
             China's economy has shown significant growth over the past decade...
 
-            {{resource['iframe_html']}}
+            [TAKO_CHART:China GDP Growth 2000-2020]
 
-            The data visualization above shows...
+            The data visualization above shows the dramatic increase in GDP...
 
-            Rules for embedding charts:
-            - Place the raw iframe_html HTML directly in the markdown (it will be rendered)
-            - Position charts strategically where they support your narrative
-            - Reference the chart in text before or after embedding it
-            - Each Tako resource has an 'iframe_html' field containing the full <iframe> tag and resizing script
-            - Include 2-3 charts if available to make the report more engaging
+            RULES FOR EMBEDDING CHARTS:
+            - Use [TAKO_CHART:exact_title] syntax to embed charts
+            - The title must EXACTLY match one of the available charts listed above
+            - Position markers where you want the interactive chart to appear
+            - Add explanatory text before and after the chart marker to provide context
+            - Include 2-3 charts if available to make the report data-driven and engaging
+            - The chart will be automatically rendered as an interactive visualization
 
             You should use the search tool to get resources before answering the user's question.
+            Use the content and descriptions from both Tako charts and web resources to inform your report.
             If you finished writing the report, ask the user proactively for next steps, changes etc, make it engaging.
             To write the report, you should use the WriteReport tool. Never EVER respond with the report, only use the tool.
 
@@ -156,10 +185,23 @@ async def chat_node(
     if ai_message.tool_calls:
         if ai_message.tool_calls[0]["name"] == "WriteReport":
             report = ai_message.tool_calls[0]["args"].get("report", "")
+
+            # Post-process: Replace Tako chart markers with actual iframe HTML
+            def replace_chart_marker(match):
+                chart_title = match.group(1).strip()
+                if chart_title in tako_charts_map:
+                    return "\n\n" + tako_charts_map[chart_title] + "\n\n"
+                else:
+                    # Chart not found, leave marker but add warning
+                    return f"\n\n[Chart not found: {chart_title}]\n\n"
+
+            # Replace [TAKO_CHART:title] with actual iframe HTML
+            processed_report = re.sub(r'\[TAKO_CHART:([^\]]+)\]', replace_chart_marker, report)
+
             return Command(
                 goto="chat_node",
                 update={
-                    "report": report,
+                    "report": processed_report,
                     "messages": [
                         ai_message,
                         ToolMessage(

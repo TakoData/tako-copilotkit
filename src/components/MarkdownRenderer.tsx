@@ -2,6 +2,7 @@
 
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import rehypeRaw from "rehype-raw";
 
 interface MarkdownRendererProps {
   content: string;
@@ -12,6 +13,7 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
     <div className="prose prose-slate max-w-none bg-background px-6 py-8 border-0 shadow-none rounded-xl">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeRaw]}
         components={{
           // Custom renderer for HTML elements to allow iframes
           // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -72,19 +74,6 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
       >
         {content}
       </ReactMarkdown>
-
-      {/* Render any iframe HTML that might be in the content */}
-      {content.includes("<iframe") && (
-        <div
-          className="tako-charts-container"
-          dangerouslySetInnerHTML={{
-            __html: content
-              .split(/(?=<iframe)/g)
-              .filter((part) => part.trim().startsWith("<iframe"))
-              .join(""),
-          }}
-        />
-      )}
     </div>
   );
 }

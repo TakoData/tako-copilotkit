@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { ChevronDown } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -106,6 +107,8 @@ export function ResearchCanvas() {
   const [isAddResourceOpen, setIsAddResourceOpen] = useState(false);
   const [selectedChart, setSelectedChart] = useState<Resource | null>(null);
   const [isViewMode, setIsViewMode] = useState(false);
+  const [chartsExpanded, setChartsExpanded] = useState(true);
+  const [webExpanded, setWebExpanded] = useState(true);
 
   const addResource = () => {
     if (newResource.url) {
@@ -179,41 +182,81 @@ export function ResearchCanvas() {
 
         <div>
           <div className="flex justify-between items-center mb-4">
-            <div className="flex items-center gap-3">
-              <h2 className="text-lg font-medium text-primary">Resources</h2>
-              {resources.length > 0 && (
-                <span className="text-sm text-gray-500">
-                  {resources.filter(r => r.resource_type === 'tako_chart').length} charts, {resources.filter(r => r.resource_type === 'web').length} web
-                </span>
-              )}
+            <h2 className="text-lg font-medium text-primary">Resources</h2>
+            <div className="flex gap-2">
+              <EditResourceDialog
+                isOpen={isEditResourceOpen}
+                onOpenChange={setIsEditResourceOpen}
+                editResource={editResource}
+                setEditResource={setEditResource}
+                updateResource={updateResource}
+              />
+              <AddResourceDialog
+                isOpen={isAddResourceOpen}
+                onOpenChange={setIsAddResourceOpen}
+                newResource={newResource}
+                setNewResource={setNewResource}
+                addResource={addResource}
+              />
             </div>
-            <EditResourceDialog
-              isOpen={isEditResourceOpen}
-              onOpenChange={setIsEditResourceOpen}
-              editResource={editResource}
-              setEditResource={setEditResource}
-              updateResource={updateResource}
-            />
-            <AddResourceDialog
-              isOpen={isAddResourceOpen}
-              onOpenChange={setIsAddResourceOpen}
-              newResource={newResource}
-              setNewResource={setNewResource}
-              addResource={addResource}
-            />
           </div>
+
           {resources.length === 0 && (
             <div className="text-sm text-slate-400">
               Click the button above to add resources.
             </div>
           )}
 
-          {resources.length !== 0 && (
-            <Resources
-              resources={resources}
-              handleCardClick={handleCardClick}
-              removeResource={removeResource}
-            />
+          {resources.length > 0 && (
+            <div className="space-y-6">
+              {/* Tako Charts Section */}
+              {resources.filter(r => r.resource_type === 'tako_chart').length > 0 && (
+                <div>
+                  <button
+                    onClick={() => setChartsExpanded(!chartsExpanded)}
+                    className="flex items-center gap-2 text-base font-medium text-primary mb-3 hover:text-[#6766FC] transition-colors"
+                  >
+                    <ChevronDown
+                      className={`w-5 h-5 transition-transform ${
+                        chartsExpanded ? "" : "-rotate-90"
+                      }`}
+                    />
+                    Tako Charts ({resources.filter(r => r.resource_type === 'tako_chart').length})
+                  </button>
+                  {chartsExpanded && (
+                    <Resources
+                      resources={resources.filter(r => r.resource_type === 'tako_chart')}
+                      handleCardClick={handleCardClick}
+                      removeResource={removeResource}
+                    />
+                  )}
+                </div>
+              )}
+
+              {/* Web Resources Section */}
+              {resources.filter(r => r.resource_type === 'web').length > 0 && (
+                <div>
+                  <button
+                    onClick={() => setWebExpanded(!webExpanded)}
+                    className="flex items-center gap-2 text-base font-medium text-primary mb-3 hover:text-[#6766FC] transition-colors"
+                  >
+                    <ChevronDown
+                      className={`w-5 h-5 transition-transform ${
+                        webExpanded ? "" : "-rotate-90"
+                      }`}
+                    />
+                    Web Resources ({resources.filter(r => r.resource_type === 'web').length})
+                  </button>
+                  {webExpanded && (
+                    <Resources
+                      resources={resources.filter(r => r.resource_type === 'web')}
+                      handleCardClick={handleCardClick}
+                      removeResource={removeResource}
+                    />
+                  )}
+                </div>
+              )}
+            </div>
           )}
         </div>
 

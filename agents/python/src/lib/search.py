@@ -123,9 +123,9 @@ async def search_node(state: AgentState, config: RunnableConfig):
         elif result:  # Tako returned results
             # Get iframe HTML for each Tako chart
             for chart in result:
-                pub_id = chart.get("pub_id")
-                if pub_id:
-                    iframe_html = await get_tako_chart_iframe(pub_id)
+                embed_url = chart.get("embed_url")
+                if embed_url:
+                    iframe_html = await get_tako_chart_iframe(embed_url)
                     chart["iframe_html"] = iframe_html
             tako_results.extend(result)
         state["logs"][log_index]["done"] = True
