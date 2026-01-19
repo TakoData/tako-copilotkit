@@ -49,24 +49,46 @@ export async function search_node(state: AgentState, config: RunnableConfig) {
   let logs = state["logs"] || [];
 
   // Support both Search tool queries and data_questions
-  let queries: string[] = [];
+  let webQueries: string[] = [];
   if (aiMessage.tool_calls && aiMessage.tool_calls[0]?.name === "Search") {
-    queries = aiMessage.tool_calls[0]["args"]["queries"];
-  } else if (state.data_questions && state.data_questions.length > 0) {
-    queries = state.data_questions;
+    webQueries = aiMessage.tool_calls[0]["args"]["queries"];
   }
+
+  const dataQuestions = state.data_questions || [];
+
+  // Separate fast and deep questions for staged execution
+  const fastQuestions = dataQuestions.filter(q => q.search_effort === "fast");
+  const deepQuestions = dataQuestions.filter(q => q.search_effort === "deep");
 
   // Initialize Tako MCP client
   const { tools: takoTools } = await initializeTakoMCP();
   const takoSearchTool = getTakoTool(takoTools, "tako_knowledge_search");
   const takoOpenChartTool = getTakoTool(takoTools, "tako_open_chart_ui");
 
-  for (const query of queries) {
+  // Add logs for web searches
+  for (const query of webQueries) {
     logs.push({
-      message: `Search for ${query}`,
+      message: `Web search for ${query}`,
       done: false,
     });
   }
+
+  // Add logs for fast Tako searches
+  for (const q of fastQuestions) {
+    logs.push({
+      message: `Tako fast search: ${q.question}`,
+      done: false,
+    });
+  }
+
+  // Add logs for deep Tako searches
+  for (const q of deepQuestions) {
+    logs.push({
+      message: `Tako deep search: ${q.question}`,
+      done: false,
+    });
+  }
+
   const { messages, ...restOfState } = state;
   await copilotkitEmitState(config, {
     ...restOfState,
@@ -77,28 +99,43 @@ export async function search_node(state: AgentState, config: RunnableConfig) {
   const search_results = [];
   const tako_results: any[] = [];
 
-  // Parallel search: Tako + Tavily
-  for (let i = 0; i < queries.length; i++) {
-    const query = queries[i];
+  // STAGE 1: Run web searches and fast Tako searches in parallel
+  const fastSearchPromises = [];
 
-    // Execute Tako and Tavily searches in parallel
-    const [tavilyResponse, takoResponse] = await Promise.all([
-      tavilyClient.search(query, {}),
-      takoSearchTool
-        ? takoSearchTool.invoke({
-            query,
-            count: 5,
-            search_effort: "deep",
-          })
-        : Promise.resolve(null),
-    ]);
+  // Add Tavily web searches
+  for (const query of webQueries) {
+    fastSearchPromises.push(
+      tavilyClient.search(query, {}).then(result => ({ type: 'web', result }))
+    );
+  }
 
-    search_results.push(tavilyResponse);
-    if (takoResponse) {
-      tako_results.push(takoResponse);
+  // Add fast Tako searches
+  for (const q of fastQuestions) {
+    if (takoSearchTool) {
+      fastSearchPromises.push(
+        takoSearchTool.invoke({
+          query: q.question,
+          count: 5,
+          search_effort: "fast",
+        }).then(result => ({ type: 'tako', result, question: q }))
+      );
     }
+  }
 
-    logs[i]["done"] = true;
+  const fastResults = await Promise.all(fastSearchPromises);
+
+  // Process fast results
+  let logIndex = 0;
+  for (const item of fastResults) {
+    if (item.type === 'web') {
+      search_results.push(item.result);
+      logs[logIndex]["done"] = true;
+      logIndex++;
+    } else if (item.type === 'tako' && item.result) {
+      tako_results.push(item.result);
+      logs[logIndex]["done"] = true;
+      logIndex++;
+    }
     await copilotkitEmitState(config, {
       ...restOfState,
       logs,
@@ -106,20 +143,15 @@ export async function search_node(state: AgentState, config: RunnableConfig) {
     });
   }
 
-  // Process Tako results and get iframes
+  // Process fast Tako results (add to resources immediately)
   const existingUrls = new Set(resources.map((r) => r.url));
 
   for (const takoResult of tako_results) {
     if (takoResult && takoResult.results) {
       for (const result of takoResult.results) {
         const chartUrl = result.url;
+        if (existingUrls.has(chartUrl)) continue;
 
-        // Skip if already exists
-        if (existingUrls.has(chartUrl)) {
-          continue;
-        }
-
-        // Get iframe HTML for this chart
         let iframeHtml = "";
         if (takoOpenChartTool && result.card_id) {
           try {
@@ -132,7 +164,6 @@ export async function search_node(state: AgentState, config: RunnableConfig) {
           }
         }
 
-        // Add Tako chart resource
         resources.push({
           url: chartUrl,
           title: result.title || "Tako Chart",
@@ -145,6 +176,72 @@ export async function search_node(state: AgentState, config: RunnableConfig) {
         });
         existingUrls.add(chartUrl);
       }
+    }
+  }
+
+  // STAGE 2: Deep searches - streaming (one at a time)
+  for (let i = 0; i < deepQuestions.length; i++) {
+    const q = deepQuestions[i];
+    const deepLogIndex = webQueries.length + fastQuestions.length + i;
+
+    try {
+      if (takoSearchTool) {
+        const takoResponse = await takoSearchTool.invoke({
+          query: q.question,
+          count: 5,
+          search_effort: "deep",
+        });
+
+        if (takoResponse && takoResponse.results) {
+          // Process deep search results and add to resources immediately (streaming)
+          for (const result of takoResponse.results) {
+            const chartUrl = result.url;
+            if (existingUrls.has(chartUrl)) continue;
+
+            let iframeHtml = "";
+            if (takoOpenChartTool && result.card_id) {
+              try {
+                const iframeResult = await takoOpenChartTool.invoke({
+                  card_id: result.card_id,
+                });
+                iframeHtml = iframeResult?.iframe_html || "";
+              } catch (error) {
+                console.error("Failed to get iframe for chart:", error);
+              }
+            }
+
+            // STREAM: Add resource immediately
+            resources.push({
+              url: chartUrl,
+              title: result.title || "Tako Chart",
+              description: result.description || "",
+              content: result.description || "",
+              resource_type: "tako_chart",
+              card_id: result.card_id,
+              iframe_html: iframeHtml,
+              source: "Tako",
+            });
+            existingUrls.add(chartUrl);
+          }
+
+          tako_results.push(takoResponse);
+        }
+      }
+
+      logs[deepLogIndex]["done"] = true;
+      await copilotkitEmitState(config, {
+        ...restOfState,
+        logs,
+        resources,
+      });
+    } catch (error) {
+      console.error(`Deep search failed for "${q.question}":`, error);
+      logs[deepLogIndex]["done"] = true;
+      await copilotkitEmitState(config, {
+        ...restOfState,
+        logs,
+        resources,
+      });
     }
   }
 

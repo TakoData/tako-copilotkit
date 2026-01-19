@@ -11,7 +11,7 @@ from langgraph.types import Command
 
 from src.lib.download import get_resource
 from src.lib.model import get_model
-from src.lib.state import AgentState
+from src.lib.state import AgentState, DataQuestion
 
 
 @tool
@@ -35,8 +35,22 @@ def DeleteResources(urls: List[str]):  # pylint: disable=invalid-name,unused-arg
 
 
 @tool
-def GenerateDataQuestions(questions: List[str]):  # pylint: disable=invalid-name,unused-argument
-    """Generate 3-5 data-focused questions to search Tako's knowledge base for relevant charts and visualizations."""
+def GenerateDataQuestions(questions: List[DataQuestion]):  # pylint: disable=invalid-name,unused-argument
+    """
+    Generate 3-6 data-focused questions to search Tako's knowledge base.
+
+    Create a diverse set of questions with different complexity levels:
+    - 2-3 basic questions (search_effort='fast') for straightforward data lookups
+    - 1-2 complex questions (search_effort='deep') for in-depth analysis
+    - 0-1 prediction market questions (search_effort='deep') about forecasts, probabilities, or future outcomes
+
+    Example:
+    [
+        {"question": "China GDP 2020-2024", "search_effort": "fast", "query_type": "basic"},
+        {"question": "What factors drove China's economic growth post-pandemic?", "search_effort": "deep", "query_type": "complex"},
+        {"question": "What are prediction market odds for China GDP growth in 2025?", "search_effort": "deep", "query_type": "prediction_market"}
+    ]
+    """
 
 
 async def chat_node(
@@ -73,7 +87,7 @@ async def chat_node(
 
     resources = []
     tako_charts_map = {}
-    available_tako_titles = []
+    available_tako_charts = []
 
     for resource in state["resources"]:
         # Tako charts already have descriptions, don't fetch content
@@ -91,9 +105,7 @@ async def chat_node(
             # Build Tako charts map for post-processing
             if title and iframe_html:
                 tako_charts_map[title] = iframe_html
-                # Include description so LLM knows what the chart contains
-                desc_preview = description[:200] + "..." if len(description) > 200 else description
-                available_tako_titles.append(f"  - **{title}**\n    {desc_preview}")
+                available_tako_charts.append(f"  - **{title}**\n    Description: {description}")
         else:
             # Web resources: fetch content
             content = get_resource(resource["url"])
@@ -101,15 +113,7 @@ async def chat_node(
                 continue
             resources.append({**resource, "content": content})
 
-    available_tako_titles_str = "\n".join(available_tako_titles) if available_tako_titles else "  (No Tako charts available yet)"
-
-    # Debug log to help troubleshoot chart embedding
-    if available_tako_titles:
-        print(f"\n📊 {len(available_tako_titles)} Tako charts available for embedding:")
-        for title_line in available_tako_titles[:3]:  # Show first 3
-            print(f"  {title_line.split('**')[1] if '**' in title_line else title_line}")
-    else:
-        print("⚠️  No Tako charts available for embedding in report")
+    available_tako_charts_str = "\n".join(available_tako_charts) if available_tako_charts else "  (No Tako charts available yet)"
 
     model = get_model(state)
     # Prepare the kwargs for the ainvoke method
@@ -135,7 +139,10 @@ async def chat_node(
 
             RESEARCH WORKFLOW:
             1. FIRST: When you receive a user's query, use WriteResearchQuestion to extract/formulate the core research question
-            2. THEN: Use GenerateDataQuestions to create 3-5 data-focused questions for Tako's knowledge base
+            2. THEN: Use GenerateDataQuestions to create 3-6 data-focused questions with varied complexity:
+               - 2-3 BASIC questions (fast search) for straightforward data: "Country X GDP 2020-2024"
+               - 1-2 COMPLEX questions (deep search) for analytical insights: "What factors drove X's growth?"
+               - 0-1 PREDICTION MARKET question (deep search) if relevant: "What are odds for X in 2025?"
             3. These questions will search Tako for relevant charts and visualizations
             4. Use the Search tool for web resources
             5. When writing the report, err on the side of using Tako charts wherever relevant and include [TAKO_CHART:title] markers
@@ -152,7 +159,7 @@ async def chat_node(
             SYNTAX: [TAKO_CHART:exact_title_of_chart]
 
             AVAILABLE TAKO CHARTS:
-{available_tako_titles_str}
+{available_tako_charts_str}
 
             **Remember: The charts above are already fetched and ready to embed. Use them liberally throughout your report!**
 
@@ -173,8 +180,9 @@ async def chat_node(
             - Position markers where you want the interactive chart to appear
             - Add explanatory text before and after the chart marker to provide context
             - **Try to include ALL available charts** that have any relevance to the research topic
+            - Evaluate the chart description to ensure it provides related data for the point you're making
             - A chart adds value even if it only partially relates to your discussion
-            - More data visualization = better report. When in doubt, include the chart!
+            - Skip charts that are unrelated and don't add meaningful insights
             - The chart will be automatically rendered as an interactive visualization
 
             You should use the search tool to get resources before answering the user's question.

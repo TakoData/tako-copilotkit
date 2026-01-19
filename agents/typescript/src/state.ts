@@ -20,6 +20,13 @@ const LogAnnotation = Annotation.Root({
   done: Annotation<boolean>,
 });
 
+// Define a DataQuestion annotation for structured queries
+const DataQuestionAnnotation = Annotation.Root({
+  question: Annotation<string>,
+  search_effort: Annotation<'fast' | 'deep'>,
+  query_type: Annotation<'basic' | 'complex' | 'prediction_market'>,
+});
+
 // Define the AgentState annotation, extending MessagesState
 export const AgentStateAnnotation = Annotation.Root({
   model: Annotation<string>,
@@ -27,9 +34,10 @@ export const AgentStateAnnotation = Annotation.Root({
   report: Annotation<string>,
   resources: Annotation<(typeof ResourceAnnotation.State)[]>,
   logs: Annotation<(typeof LogAnnotation.State)[]>,
-  data_questions: Annotation<string[]>,
+  data_questions: Annotation<(typeof DataQuestionAnnotation.State)[]>,
   ...CopilotKitStateAnnotation.spec,
 });
 
 export type AgentState = typeof AgentStateAnnotation.State;
 export type Resource = typeof ResourceAnnotation.State;
+export type DataQuestion = typeof DataQuestionAnnotation.State;
