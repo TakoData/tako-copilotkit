@@ -22,8 +22,9 @@ import {
   copilotkitEmitState,
 } from "@copilotkit/sdk-js/langgraph";
 import { initializeTakoMCP, getTakoTool } from "./tako/mcp-client";
-import { TakoSearchResult } from "./tako/types";
+import { ENABLE_DEEP_QUERIES } from "./chat";
 
+const MAX_WEB_SEARCHES = 3;
 const ResourceInput = z.object({
   url: z.string().describe("The URL of the resource"),
   title: z.string().describe("The title of the resource"),
@@ -51,14 +52,22 @@ export async function search_node(state: AgentState, config: RunnableConfig) {
   // Support both Search tool queries and data_questions
   let webQueries: string[] = [];
   if (aiMessage.tool_calls && aiMessage.tool_calls[0]?.name === "Search") {
-    webQueries = aiMessage.tool_calls[0]["args"]["queries"];
+    webQueries = aiMessage.tool_calls[0]["args"]["queries"].slice(0, MAX_WEB_SEARCHES);
   }
 
   const dataQuestions = state.data_questions || [];
 
   // Separate fast and deep questions for staged execution
   const fastQuestions = dataQuestions.filter(q => q.search_effort === "fast");
-  const deepQuestions = dataQuestions.filter(q => q.search_effort === "deep");
+  let deepQuestions = dataQuestions.filter(q => q.search_effort === "deep");
+
+  // Filter out deep queries if disabled
+  if (!ENABLE_DEEP_QUERIES) {
+    if (deepQuestions.length > 0) {
+      console.log(`⏭️  Skipping ${deepQuestions.length} deep queries (ENABLE_DEEP_QUERIES=false)`);
+    }
+    deepQuestions = [];
+  }
 
   // Initialize Tako MCP client
   const { tools: takoTools } = await initializeTakoMCP();
@@ -125,6 +134,8 @@ export async function search_node(state: AgentState, config: RunnableConfig) {
   const fastResults = await Promise.all(fastSearchPromises);
 
   // Process fast results
+  console.log('\n' + '='.repeat(80));
+  console.log('📈 TAKO SEARCH RESULTS (Fast)');
   let logIndex = 0;
   for (const item of fastResults) {
     if (item.type === 'web') {
@@ -133,6 +144,17 @@ export async function search_node(state: AgentState, config: RunnableConfig) {
       logIndex++;
     } else if (item.type === 'tako' && item.result) {
       tako_results.push(item.result);
+      const question = (item as any).question?.question || 'Unknown';
+      const resultCount = item.result?.results?.length || 0;
+      if (resultCount > 0) {
+        console.log(`  ✅ '${question}' - ${resultCount} charts`);
+        item.result.results.slice(0, 2).forEach((chart: any) => {
+          const title = chart.title || 'N/A';
+          console.log(`      - ${title.substring(0, 60)}`);
+        });
+      } else {
+        console.log(`  ⚠️  '${question}' - No results`);
+      }
       logs[logIndex]["done"] = true;
       logIndex++;
     }
@@ -142,6 +164,7 @@ export async function search_node(state: AgentState, config: RunnableConfig) {
       resources,
     });
   }
+  console.log('='.repeat(80) + '\n');
 
   // Process fast Tako results (add to resources immediately)
   const existingUrls = new Set(resources.map((r) => r.url));
@@ -180,6 +203,10 @@ export async function search_node(state: AgentState, config: RunnableConfig) {
   }
 
   // STAGE 2: Deep searches - streaming (one at a time)
+  if (deepQuestions.length > 0) {
+    console.log('\n' + '='.repeat(80));
+    console.log('📈 TAKO SEARCH RESULTS (Deep)');
+  }
   for (let i = 0; i < deepQuestions.length; i++) {
     const q = deepQuestions[i];
     const deepLogIndex = webQueries.length + fastQuestions.length + i;
@@ -193,6 +220,13 @@ export async function search_node(state: AgentState, config: RunnableConfig) {
         });
 
         if (takoResponse && takoResponse.results) {
+          const resultCount = takoResponse.results.length;
+          console.log(`  ✅ '${q.question}' - ${resultCount} charts`);
+          takoResponse.results.slice(0, 2).forEach((chart: any) => {
+            const title = chart.title || 'N/A';
+            console.log(`      - ${title.substring(0, 60)}`);
+          });
+
           // Process deep search results and add to resources immediately (streaming)
           for (const result of takoResponse.results) {
             const chartUrl = result.url;
@@ -225,6 +259,8 @@ export async function search_node(state: AgentState, config: RunnableConfig) {
           }
 
           tako_results.push(takoResponse);
+        } else {
+          console.log(`  ⚠️  '${q.question}' - No results`);
         }
       }
 
@@ -235,7 +271,7 @@ export async function search_node(state: AgentState, config: RunnableConfig) {
         resources,
       });
     } catch (error) {
-      console.error(`Deep search failed for "${q.question}":`, error);
+      console.log(`  ❌ '${q.question}' - ERROR: ${error}`);
       logs[deepLogIndex]["done"] = true;
       await copilotkitEmitState(config, {
         ...restOfState,
@@ -243,6 +279,9 @@ export async function search_node(state: AgentState, config: RunnableConfig) {
         resources,
       });
     }
+  }
+  if (deepQuestions.length > 0) {
+    console.log('='.repeat(80) + '\n');
   }
 
   const toolCallId = aiMessage.tool_calls && aiMessage.tool_calls[0]?.id

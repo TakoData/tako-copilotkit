@@ -16,6 +16,10 @@ import { z } from "zod";
 import { copilotkitCustomizeConfig } from "@copilotkit/sdk-js/langgraph";
 import { initializeTakoMCP, callTakoExplore, formatExploreResults } from "./tako/mcp-client";
 
+// Feature toggles
+const ENABLE_EXPLORE_API = false;
+const ENABLE_DEEP_QUERIES = false;
+
 const Search = tool(() => {}, {
   name: "Search",
   description:
@@ -147,6 +151,20 @@ export async function chat_node(state: AgentState, config: RunnableConfig) {
     invokeArgs["parallel_tool_calls"] = false;
   }
 
+  // Build dynamic prompt based on feature toggles
+  const dataQuestionsInstructions = ENABLE_DEEP_QUERIES
+    ? `2. THEN: Use GenerateDataQuestions to create 3-6 data-focused questions with varied complexity:
+           - 2-3 BASIC questions (fast search) for straightforward data: "Country X GDP 2020-2024"
+           - 1-2 COMPLEX questions (deep search) for analytical insights: "What factors drove X's growth?"
+           - 0-1 PREDICTION MARKET question (deep search) if relevant: "What are odds for X in 2025?"
+           - Use the entities, metrics, cohorts, and time periods listed in the knowledge base context above when available
+           - Prefer exact entity/metric names from the knowledge base context for better search results`
+    : `2. THEN: Use GenerateDataQuestions to create 2-4 BASIC data-focused questions (fast search only):
+           - Focus on straightforward data lookups: "Country X GDP 2020-2024"
+           - Use the entities, metrics, cohorts, and time periods listed in the knowledge base context above when available
+           - Prefer exact entity/metric names from the knowledge base context for better search results
+           - Note: Deep/complex queries are currently disabled`;
+
   const response = await model.bindTools!(
     allTools,
     invokeArgs
@@ -160,12 +178,7 @@ export async function chat_node(state: AgentState, config: RunnableConfig) {
 
         RESEARCH WORKFLOW:
         1. FIRST: When you receive a user's query, use WriteResearchQuestion to extract/formulate the core research question
-        2. THEN: Use GenerateDataQuestions to create 3-6 data-focused questions with varied complexity:
-           - 2-3 BASIC questions (fast search) for straightforward data: "Country X GDP 2020-2024"
-           - 1-2 COMPLEX questions (deep search) for analytical insights: "What factors drove X's growth?"
-           - 0-1 PREDICTION MARKET question (deep search) if relevant: "What are odds for X in 2025?"
-           - Use the entities, metrics, cohorts, and time periods listed in the knowledge base context above when available
-           - Prefer exact entity/metric names from the knowledge base context for better search results
+        ${dataQuestionsInstructions}
         3. These questions will search Tako for relevant charts and visualizations
         4. Use the Search tool for web resources
         5. Combine insights from both Tako charts and web resources in your report
@@ -258,9 +271,49 @@ ${availableTakoChartsStr}
     } else if (aiMessage.tool_calls[0].name === "WriteResearchQuestion") {
       const researchQuestion = aiMessage.tool_calls[0].args.research_question;
 
-      // Call explore API to get knowledge graph context
-      const exploreResults = await callTakoExplore(researchQuestion);
-      const exploreContext = formatExploreResults(exploreResults);
+      // Call explore API to get knowledge graph context (if enabled)
+      let exploreContext = '';
+      if (ENABLE_EXPLORE_API) {
+        console.log('\n' + '='.repeat(80));
+        console.log('🔍 EXPLORE API CALL');
+        console.log(`Research Question: ${researchQuestion}`);
+        const exploreResults = await callTakoExplore(researchQuestion);
+        exploreContext = formatExploreResults(exploreResults);
+
+        // Log explore results
+        if (exploreResults.total_matches > 0) {
+          console.log('\n📊 EXPLORE RESULTS:');
+          if (exploreResults.entities?.length) {
+            console.log(`  Entities (${exploreResults.entities.length}):`);
+            exploreResults.entities.slice(0, 5).forEach((e: any) => {
+              console.log(`    - ${e.name || 'N/A'}`);
+            });
+          }
+          if (exploreResults.metrics?.length) {
+            console.log(`  Metrics (${exploreResults.metrics.length}):`);
+            exploreResults.metrics.slice(0, 5).forEach((m: any) => {
+              console.log(`    - ${m.name || 'N/A'}`);
+            });
+          }
+          if (exploreResults.cohorts?.length) {
+            console.log(`  Cohorts (${exploreResults.cohorts.length}):`);
+            exploreResults.cohorts.slice(0, 3).forEach((c: any) => {
+              console.log(`    - ${c.name || 'N/A'}`);
+            });
+          }
+          if (exploreResults.time_periods?.length) {
+            console.log(`  Time Periods (${exploreResults.time_periods.length}):`);
+            exploreResults.time_periods.slice(0, 3).forEach((t: string) => {
+              console.log(`    - ${t}`);
+            });
+          }
+        } else {
+          console.log('  ⚠️  No explore results found');
+        }
+        console.log('='.repeat(80) + '\n');
+      } else {
+        console.log('⏭️  Explore API disabled (ENABLE_EXPLORE_API=false)');
+      }
 
       return {
         research_question: researchQuestion,
@@ -276,6 +329,18 @@ ${availableTakoChartsStr}
       };
     } else if (aiMessage.tool_calls[0].name === "GenerateDataQuestions") {
       const dataQuestions = aiMessage.tool_calls[0].args.questions;
+
+      // Log generated data questions
+      console.log('\n' + '='.repeat(80));
+      console.log(`❓ GENERATED DATA QUESTIONS (${dataQuestions.length} total)`);
+      dataQuestions.forEach((q: any, i: number) => {
+        const effort = q.search_effort || 'unknown';
+        const queryType = q.query_type || 'unknown';
+        const question = q.question || 'N/A';
+        console.log(`  ${i + 1}. [${effort.toUpperCase()}] [${queryType}] ${question}`);
+      });
+      console.log('='.repeat(80) + '\n');
+
       return {
         data_questions: dataQuestions,
         messages: [

@@ -16,7 +16,11 @@ from tavily import TavilyClient
 from src.lib.model import get_model
 from src.lib.state import AgentState
 from src.lib.tako_mcp import call_tako_knowledge_search, get_tako_chart_iframe
+from src.lib.chat import ENABLE_DEEP_QUERIES
 
+
+# Configuration
+MAX_WEB_SEARCHES = 3
 
 class ResourceInput(BaseModel):
     """A resource with a short description"""
@@ -84,7 +88,7 @@ async def search_node(state: AgentState, config: RunnableConfig):
 
     # Handle both Search tool and GenerateDataQuestions routing
     if ai_message.tool_calls and ai_message.tool_calls[0]["name"] == "Search":
-        queries = ai_message.tool_calls[0]["args"].get("queries", [])
+        queries = ai_message.tool_calls[0]["args"].get("queries", [])[:MAX_WEB_SEARCHES]
     else:
         queries = []  # No web search queries when coming from GenerateDataQuestions
 
@@ -93,6 +97,12 @@ async def search_node(state: AgentState, config: RunnableConfig):
     # Separate fast and deep questions for staged execution
     fast_questions = [q for q in data_questions if isinstance(q, dict) and q.get("search_effort") == "fast"]
     deep_questions = [q for q in data_questions if isinstance(q, dict) and q.get("search_effort") == "deep"]
+
+    # Filter out deep queries if disabled
+    if not ENABLE_DEEP_QUERIES:
+        if deep_questions:
+            print(f"⏭️  Skipping {len(deep_questions)} deep queries (ENABLE_DEEP_QUERIES=False)")
+        deep_questions = []
 
     # Add logs for both web and Tako searches
     for query in queries:
@@ -134,10 +144,14 @@ async def search_node(state: AgentState, config: RunnableConfig):
         await copilotkit_emit_state(config, state)
 
     # Process fast Tako results
+    print(f"\n{'='*80}")
+    print(f"📈 TAKO SEARCH RESULTS (Fast)")
     for i, result in enumerate(fast_tako_results):
         log_index = num_tavily + i
+        question = fast_questions[i]["question"]
         if isinstance(result, Exception):
             tako_results.append({"error": str(result)})
+            print(f"  ❌ '{question}' - ERROR: {result}")
         elif result:  # Tako returned results
             # Get iframe HTML for each Tako chart
             for chart in result:
@@ -146,14 +160,24 @@ async def search_node(state: AgentState, config: RunnableConfig):
                     iframe_html = await get_tako_chart_iframe(embed_url)
                     chart["iframe_html"] = iframe_html
             tako_results.extend(result)
+            print(f"  ✅ '{question}' - {len(result)} charts")
+            for chart in result[:2]:  # Show first 2 chart titles
+                print(f"      - {chart.get('title', 'N/A')[:60]}")
+        else:
+            print(f"  ⚠️  '{question}' - No results")
         state["logs"][log_index]["done"] = True
         await copilotkit_emit_state(config, state)
+    print(f"{'='*80}\n")
 
     # STAGE 2: Deep searches - streaming (one at a time)
+    if deep_questions:
+        print(f"\n{'='*80}")
+        print(f"📈 TAKO SEARCH RESULTS (Deep)")
     for i, q_obj in enumerate(deep_questions):
         log_index = num_tavily + len(fast_questions) + i
+        question = q_obj["question"]
         try:
-            result = await call_tako_knowledge_search(q_obj["question"], search_effort="deep")
+            result = await call_tako_knowledge_search(question, search_effort="deep")
             if result:  # Tako returned results
                 # Get iframe HTML for each chart
                 for chart in result:
@@ -179,14 +203,21 @@ async def search_node(state: AgentState, config: RunnableConfig):
                         existing_urls.add(chart["url"])
 
                 tako_results.extend(result)
+                print(f"  ✅ '{question}' - {len(result)} charts")
+                for chart in result[:2]:  # Show first 2 chart titles
+                    print(f"      - {chart.get('title', 'N/A')[:60]}")
+            else:
+                print(f"  ⚠️  '{question}' - No results")
 
             state["logs"][log_index]["done"] = True
             await copilotkit_emit_state(config, state)  # Stream progress + new resources
         except Exception as e:
-            print(f"Deep search failed: {e}")
+            print(f"  ❌ '{question}' - ERROR: {e}")
             tako_results.append({"error": str(e)})
             state["logs"][log_index]["done"] = True
             await copilotkit_emit_state(config, state)
+    if deep_questions:
+        print(f"{'='*80}\n")
 
     # Deduplicate Tako charts by title (same chart may appear in multiple searches)
     seen_titles = {}

@@ -15,6 +15,11 @@ from src.lib.state import AgentState, DataQuestion
 from src.lib.tako_mcp import call_tako_explore, format_explore_results
 
 
+# Feature toggles
+ENABLE_EXPLORE_API = False
+ENABLE_DEEP_QUERIES = False
+
+
 @tool
 def Search(queries: List[str]):  # pylint: disable=invalid-name,unused-argument
     """A list of one or more search queries to find good resources to support the research."""
@@ -47,9 +52,9 @@ def GenerateDataQuestions(questions: List[DataQuestion]):  # pylint: disable=inv
 
     Example:
     [
-        {"question": "China GDP 2020-2024", "search_effort": "fast", "query_type": "basic"},
-        {"question": "What factors drove China's economic growth post-pandemic?", "search_effort": "deep", "query_type": "complex"},
-        {"question": "What are prediction market odds for China GDP growth in 2025?", "search_effort": "deep", "query_type": "prediction_market"}
+        {"question": "China GDP since 1960", "search_effort": "fast", "query_type": "basic"},
+        {"question": "Compare year-over-year growth in exports for east asian countries", "search_effort": "deep", "query_type": "complex"},
+        {"question": "What are prediction market odds for China invading Taiwan in 2025?", "search_effort": "deep", "query_type": "prediction_market"}
     ]
     """
 
@@ -122,6 +127,21 @@ async def chat_node(
     if model.__class__.__name__ in ["ChatOpenAI"]:
         ainvoke_kwargs["parallel_tool_calls"] = False
 
+    # Build dynamic prompt based on feature toggles
+    if ENABLE_DEEP_QUERIES:
+        data_questions_instructions = """2. THEN: Use GenerateDataQuestions to create 3-6 data-focused questions with varied complexity:
+               - 2-3 BASIC questions (fast search) for straightforward data: "Country X GDP 2020-2024"
+               - 1-2 COMPLEX questions (deep search) for analytical insights: "What factors drove X's growth?"
+               - 0-1 PREDICTION MARKET question (deep search) if relevant: "What are odds for X in 2025?"
+               - Use the entities, metrics, cohorts, and time periods listed in the knowledge base context above when available
+               - Prefer exact entity/metric names from the knowledge base context for better search results"""
+    else:
+        data_questions_instructions = """2. THEN: Use GenerateDataQuestions to create 2-4 BASIC data-focused questions (fast search only):
+               - Focus on straightforward data lookups: "Country X GDP 2020-2024"
+               - Use the entities, metrics, cohorts, and time periods listed in the knowledge base context above when available
+               - Prefer exact entity/metric names from the knowledge base context for better search results
+               - Note: Deep/complex queries are currently disabled"""
+
     response = await model.bind_tools(
         [
             Search,
@@ -142,12 +162,7 @@ async def chat_node(
 
             RESEARCH WORKFLOW:
             1. FIRST: When you receive a user's query, use WriteResearchQuestion to extract/formulate the core research question
-            2. THEN: Use GenerateDataQuestions to create 3-6 data-focused questions with varied complexity:
-               - 2-3 BASIC questions (fast search) for straightforward data: "Country X GDP 2020-2024"
-               - 1-2 COMPLEX questions (deep search) for analytical insights: "What factors drove X's growth?"
-               - 0-1 PREDICTION MARKET question (deep search) if relevant: "What are odds for X in 2025?"
-               - Use the entities, metrics, cohorts, and time periods listed in the knowledge base context above when available
-               - Prefer exact entity/metric names from the knowledge base context for better search results
+            {data_questions_instructions}
             3. These questions will search Tako for relevant charts and visualizations
             4. Use the Search tool for web resources
             5. When writing the report, err on the side of using Tako charts wherever relevant and include [TAKO_CHART:title] markers
@@ -260,9 +275,39 @@ async def chat_node(
         if ai_message.tool_calls[0]["name"] == "WriteResearchQuestion":
             research_question = ai_message.tool_calls[0]["args"]["research_question"]
 
-            # Call explore API to get knowledge graph context
-            explore_results = await call_tako_explore(research_question)
-            explore_context = format_explore_results(explore_results)
+            # Call explore API to get knowledge graph context (if enabled)
+            explore_context = ""
+            if ENABLE_EXPLORE_API:
+                print(f"\n{'='*80}")
+                print(f"🔍 EXPLORE API CALL")
+                print(f"Research Question: {research_question}")
+                explore_results = await call_tako_explore(research_question)
+                explore_context = format_explore_results(explore_results)
+
+                # Log explore results
+                if explore_results.get("total_matches", 0) > 0:
+                    print(f"\n📊 EXPLORE RESULTS:")
+                    if explore_results.get("entities"):
+                        print(f"  Entities ({len(explore_results['entities'])}):")
+                        for e in explore_results["entities"][:5]:
+                            print(f"    - {e.get('name', 'N/A')}")
+                    if explore_results.get("metrics"):
+                        print(f"  Metrics ({len(explore_results['metrics'])}):")
+                        for m in explore_results["metrics"][:5]:
+                            print(f"    - {m.get('name', 'N/A')}")
+                    if explore_results.get("cohorts"):
+                        print(f"  Cohorts ({len(explore_results['cohorts'])}):")
+                        for c in explore_results["cohorts"][:3]:
+                            print(f"    - {c.get('name', 'N/A')}")
+                    if explore_results.get("time_periods"):
+                        print(f"  Time Periods ({len(explore_results['time_periods'])}):")
+                        for t in explore_results["time_periods"][:3]:
+                            print(f"    - {t}")
+                else:
+                    print(f"  ⚠️  No explore results found")
+                print(f"{'='*80}\n")
+            else:
+                print(f"⏭️  Explore API disabled (ENABLE_EXPLORE_API=False)")
 
             return Command(
                 goto="chat_node",
@@ -289,6 +334,17 @@ async def chat_node(
         elif tool_name == "GenerateDataQuestions":
             # Store data questions and route to search
             data_questions = ai_message.tool_calls[0]["args"].get("questions", [])
+
+            # Log generated data questions
+            print(f"\n{'='*80}")
+            print(f"❓ GENERATED DATA QUESTIONS ({len(data_questions)} total)")
+            for i, q in enumerate(data_questions, 1):
+                effort = q.get("search_effort", "unknown")
+                query_type = q.get("query_type", "unknown")
+                question = q.get("question", "N/A")
+                print(f"  {i}. [{effort.upper()}] [{query_type}] {question}")
+            print(f"{'='*80}\n")
+
             return Command(
                 goto="search_node",
                 update={
