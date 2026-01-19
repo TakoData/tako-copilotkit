@@ -25,6 +25,10 @@ async def call_tako_knowledge_search(
     tako_api_url = os.getenv("TAKO_API_URL", "http://localhost:8000")
     tako_api_token = os.getenv("TAKO_API_TOKEN", "")
 
+    # Add protocol if missing
+    if tako_api_url and not tako_api_url.startswith(("http://", "https://")):
+        tako_api_url = f"https://{tako_api_url}"
+
     try:
         async with httpx.AsyncClient(timeout=120.0) as client:  # Increased timeout for Tako searches
             # Call Tako backend API directly

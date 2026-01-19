@@ -47,6 +47,8 @@ def debug_env():
         "openai_key_present": "OPENAI_API_KEY" in os.environ,
         "openai_key_length": len(os.getenv("OPENAI_API_KEY", "")) if os.getenv("OPENAI_API_KEY") else 0,
         "port": os.getenv("PORT"),
+        "tako_api_url": os.getenv("TAKO_API_URL", "NOT SET"),
+        "tako_api_token_present": "TAKO_API_TOKEN" in os.environ,
         "all_env_keys": sorted([k for k in os.environ.keys() if not k.startswith("_")])
     }
 
