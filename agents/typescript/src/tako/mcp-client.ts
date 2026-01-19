@@ -110,3 +110,86 @@ export async function initializeTakoMCP() {
 export function getTakoTool(tools: any[], toolName: string) {
   return tools.find((tool) => tool.name === toolName);
 }
+
+/**
+ * Call Tako explore API to discover entities, metrics, cohorts.
+ *
+ * @param query - Explore query
+ * @param nodeTypes - Optional list of node types to filter (e.g. ["entity", "metric"])
+ * @param limit - Number of results to return per type (default: 10)
+ * @returns Object with keys: entities, metrics, cohorts, time_periods, total_matches
+ */
+export async function callTakoExplore(
+  query: string,
+  nodeTypes?: string[],
+  limit: number = 10
+): Promise<any> {
+  const takoApiUrl = process.env.TAKO_API_URL || "http://localhost:8000";
+  const takoApiToken = process.env.TAKO_API_TOKEN || "";
+
+  const url = takoApiUrl.startsWith("http")
+    ? takoApiUrl
+    : `https://${takoApiUrl}`;
+
+  try {
+    const response = await fetch(`${url}/api/v1/explore/`, {
+      method: 'POST',
+      headers: {
+        'X-API-Key': takoApiToken,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        query,
+        node_types: nodeTypes,
+        limit,
+      }),
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      console.log(`✓ Tako explore succeeded: ${data.total_matches} matches`);
+      return data;
+    }
+
+    console.warn(`✗ Tako explore failed: ${response.status}`);
+    return { entities: [], metrics: [], cohorts: [], time_periods: [], total_matches: 0 };
+
+  } catch (error) {
+    console.error('Failed to call Tako explore:', error);
+    return { entities: [], metrics: [], cohorts: [], time_periods: [], total_matches: 0 };
+  }
+}
+
+/**
+ * Format explore results for LLM context.
+ *
+ * @param exploreData - Raw explore API response
+ * @returns Formatted string for LLM context
+ */
+export function formatExploreResults(exploreData: any): string {
+  const parts: string[] = [];
+
+  if (exploreData.entities?.length) {
+    const entities = exploreData.entities.slice(0, 5).map((e: any) => e.name);
+    parts.push(`Entities: ${entities.join(', ')}`);
+  }
+
+  if (exploreData.metrics?.length) {
+    const metrics = exploreData.metrics.slice(0, 5).map((m: any) => m.name);
+    parts.push(`Metrics: ${metrics.join(', ')}`);
+  }
+
+  if (exploreData.cohorts?.length) {
+    const cohorts = exploreData.cohorts.slice(0, 3).map((c: any) => c.name);
+    parts.push(`Cohorts: ${cohorts.join(', ')}`);
+  }
+
+  if (exploreData.time_periods?.length) {
+    const periods = exploreData.time_periods.slice(0, 3);
+    parts.push(`Time Periods: ${periods.join(', ')}`);
+  }
+
+  if (parts.length === 0) return '';
+
+  return 'TAKO KNOWLEDGE BASE CONTEXT:\n' + parts.map(p => `  - ${p}`).join('\n');
+}

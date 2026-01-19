@@ -14,7 +14,7 @@ import {
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import { copilotkitCustomizeConfig } from "@copilotkit/sdk-js/langgraph";
-import { initializeTakoMCP } from "./tako/mcp-client";
+import { initializeTakoMCP, callTakoExplore, formatExploreResults } from "./tako/mcp-client";
 
 const Search = tool(() => {}, {
   name: "Search",
@@ -156,12 +156,16 @@ export async function chat_node(state: AgentState, config: RunnableConfig) {
         `You are a research assistant. You help the user with writing a research report.
         Do not recite the resources, instead use them to answer the user's question.
 
+        ${state.explore_context || ""}
+
         RESEARCH WORKFLOW:
         1. FIRST: When you receive a user's query, use WriteResearchQuestion to extract/formulate the core research question
         2. THEN: Use GenerateDataQuestions to create 3-6 data-focused questions with varied complexity:
            - 2-3 BASIC questions (fast search) for straightforward data: "Country X GDP 2020-2024"
            - 1-2 COMPLEX questions (deep search) for analytical insights: "What factors drove X's growth?"
            - 0-1 PREDICTION MARKET question (deep search) if relevant: "What are odds for X in 2025?"
+           - Use the entities, metrics, cohorts, and time periods listed in the knowledge base context above when available
+           - Prefer exact entity/metric names from the knowledge base context for better search results
         3. These questions will search Tako for relevant charts and visualizations
         4. Use the Search tool for web resources
         5. Combine insights from both Tako charts and web resources in your report
@@ -253,8 +257,14 @@ ${availableTakoChartsStr}
       };
     } else if (aiMessage.tool_calls[0].name === "WriteResearchQuestion") {
       const researchQuestion = aiMessage.tool_calls[0].args.research_question;
+
+      // Call explore API to get knowledge graph context
+      const exploreResults = await callTakoExplore(researchQuestion);
+      const exploreContext = formatExploreResults(exploreResults);
+
       return {
         research_question: researchQuestion,
+        explore_context: exploreContext,
         messages: [
           aiMessage,
           new ToolMessage({

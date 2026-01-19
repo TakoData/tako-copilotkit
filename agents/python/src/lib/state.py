@@ -45,3 +45,4 @@ class AgentState(MessagesState):
     resources: List[Resource]
     logs: List[Log]
     data_questions: NotRequired[List[DataQuestion]]
+    explore_context: NotRequired[str]

@@ -35,6 +35,7 @@ export const AgentStateAnnotation = Annotation.Root({
   resources: Annotation<(typeof ResourceAnnotation.State)[]>,
   logs: Annotation<(typeof LogAnnotation.State)[]>,
   data_questions: Annotation<(typeof DataQuestionAnnotation.State)[]>,
+  explore_context: Annotation<string>,
   ...CopilotKitStateAnnotation.spec,
 });
 

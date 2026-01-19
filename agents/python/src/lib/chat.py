@@ -12,6 +12,7 @@ from langgraph.types import Command
 from src.lib.download import get_resource
 from src.lib.model import get_model
 from src.lib.state import AgentState, DataQuestion
+from src.lib.tako_mcp import call_tako_explore, format_explore_results
 
 
 @tool
@@ -137,12 +138,16 @@ async def chat_node(
             You are a research assistant. You help the user with writing a research report.
             Do not recite the resources, instead use them to answer the user's question.
 
+            {state.get("explore_context", "")}
+
             RESEARCH WORKFLOW:
             1. FIRST: When you receive a user's query, use WriteResearchQuestion to extract/formulate the core research question
             2. THEN: Use GenerateDataQuestions to create 3-6 data-focused questions with varied complexity:
                - 2-3 BASIC questions (fast search) for straightforward data: "Country X GDP 2020-2024"
                - 1-2 COMPLEX questions (deep search) for analytical insights: "What factors drove X's growth?"
                - 0-1 PREDICTION MARKET question (deep search) if relevant: "What are odds for X in 2025?"
+               - Use the entities, metrics, cohorts, and time periods listed in the knowledge base context above when available
+               - Prefer exact entity/metric names from the knowledge base context for better search results
             3. These questions will search Tako for relevant charts and visualizations
             4. Use the Search tool for web resources
             5. When writing the report, err on the side of using Tako charts wherever relevant and include [TAKO_CHART:title] markers
@@ -253,12 +258,17 @@ async def chat_node(
                 },
             )
         if ai_message.tool_calls[0]["name"] == "WriteResearchQuestion":
+            research_question = ai_message.tool_calls[0]["args"]["research_question"]
+
+            # Call explore API to get knowledge graph context
+            explore_results = await call_tako_explore(research_question)
+            explore_context = format_explore_results(explore_results)
+
             return Command(
                 goto="chat_node",
                 update={
-                    "research_question": ai_message.tool_calls[0]["args"][
-                        "research_question"
-                    ],
+                    "research_question": research_question,
+                    "explore_context": explore_context,
                     "messages": [
                         ai_message,
                         ToolMessage(
