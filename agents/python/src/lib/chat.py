@@ -91,7 +91,9 @@ async def chat_node(
             # Build Tako charts map for post-processing
             if title and iframe_html:
                 tako_charts_map[title] = iframe_html
-                available_tako_titles.append(f"  - {title}")
+                # Include description so LLM knows what the chart contains
+                desc_preview = description[:200] + "..." if len(description) > 200 else description
+                available_tako_titles.append(f"  - **{title}**\n    {desc_preview}")
         else:
             # Web resources: fetch content
             content = get_resource(resource["url"])
@@ -100,6 +102,14 @@ async def chat_node(
             resources.append({**resource, "content": content})
 
     available_tako_titles_str = "\n".join(available_tako_titles) if available_tako_titles else "  (No Tako charts available yet)"
+
+    # Debug log to help troubleshoot chart embedding
+    if available_tako_titles:
+        print(f"\n📊 {len(available_tako_titles)} Tako charts available for embedding:")
+        for title_line in available_tako_titles[:3]:  # Show first 3
+            print(f"  {title_line.split('**')[1] if '**' in title_line else title_line}")
+    else:
+        print("⚠️  No Tako charts available for embedding in report")
 
     model = get_model(state)
     # Prepare the kwargs for the ainvoke method
@@ -128,7 +138,8 @@ async def chat_node(
             2. THEN: Use GenerateDataQuestions to create 3-5 data-focused questions for Tako's knowledge base
             3. These questions will search Tako for relevant charts and visualizations
             4. Use the Search tool for web resources
-            5. Combine insights from both Tako charts and web resources in your report
+            5. When writing the report, err on the side of using Tako charts wherever relevant and include [TAKO_CHART:title] markers
+            6. Combine insights from both Tako charts and web resources in your report
 
             IMPORTANT ABOUT RESEARCH QUESTION:
             - Always start by using WriteResearchQuestion to capture the user's research intent
@@ -143,6 +154,8 @@ async def chat_node(
             AVAILABLE TAKO CHARTS:
 {available_tako_titles_str}
 
+            **Remember: The charts above are already fetched and ready to embed. Use them liberally throughout your report!**
+
             EXAMPLE:
             ## Economic Growth Analysis
 
@@ -153,11 +166,15 @@ async def chat_node(
             The data visualization above shows the dramatic increase in GDP...
 
             RULES FOR EMBEDDING CHARTS:
+            - **CRITICAL**: Err on the side of INCLUDING charts - if a chart is even tangentially relevant, embed it!
+            - Review the chart descriptions above and look for ANY opportunity to embed them
             - Use [TAKO_CHART:exact_title] syntax to embed charts
-            - The title must EXACTLY match one of the available charts listed above
+            - The title must EXACTLY match one of the available charts listed above (copy the title from the bold text)
             - Position markers where you want the interactive chart to appear
             - Add explanatory text before and after the chart marker to provide context
-            - Include 2-3 charts if available to make the report data-driven and engaging
+            - **Try to include ALL available charts** that have any relevance to the research topic
+            - A chart adds value even if it only partially relates to your discussion
+            - More data visualization = better report. When in doubt, include the chart!
             - The chart will be automatically rendered as an interactive visualization
 
             You should use the search tool to get resources before answering the user's question.
@@ -187,19 +204,31 @@ async def chat_node(
             report = ai_message.tool_calls[0]["args"].get("report", "")
 
             # Post-process: Replace Tako chart markers with actual iframe HTML
+            embedded_charts = []
             def replace_chart_marker(match):
                 chart_title = match.group(1).strip()
                 if chart_title in tako_charts_map:
+                    embedded_charts.append(chart_title)
                     iframe_html = tako_charts_map[chart_title]
                     # Remove script tags - resize listener is handled in React component
                     iframe_only = re.sub(r'<script.*?</script>', '', iframe_html, flags=re.DOTALL)
                     return "\n\n" + iframe_only + "\n\n"
                 else:
                     # Chart not found, leave marker but add warning
+                    print(f"⚠️  Chart not found for embedding: '{chart_title}'")
+                    print(f"   Available charts: {list(tako_charts_map.keys())[:3]}")
                     return f"\n\n[Chart not found: {chart_title}]\n\n"
 
             # Replace [TAKO_CHART:title] with actual iframe HTML
             processed_report = re.sub(r'\[TAKO_CHART:([^\]]+)\]', replace_chart_marker, report)
+
+            # Log embedded charts
+            if embedded_charts:
+                print(f"\n✅ Embedded {len(embedded_charts)} Tako charts in report:")
+                for title in embedded_charts:
+                    print(f"   - {title}")
+            else:
+                print("\n⚠️  No Tako charts were embedded in the report (LLM didn't use [TAKO_CHART:...] markers)")
 
             return Command(
                 goto="chat_node",

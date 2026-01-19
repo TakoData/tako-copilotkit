@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ChevronDown } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -33,12 +33,39 @@ export function ResearchCanvas() {
     },
   });
 
+  // Maintain stable resources to prevent flickering during state updates
+  // Resources persist on screen even during intermediate state updates
+  const [stableResources, setStableResources] = useState<Resource[]>([]);
+
+  useEffect(() => {
+    // Update stable resources when new resources arrive
+    if (state.resources && state.resources.length > 0) {
+      setStableResources(state.resources);
+    }
+    // Keep existing resources displayed during transitions to prevent flickering
+  }, [state.resources]);
+
   useCoAgentStateRender({
     name: agent,
     render: ({ state, nodeName, status }) => {
-      if (!state.logs || state.logs.length === 0) {
+      // Show progress if logs exist, or if agent is still running but logs were cleared
+      const hasLogs = state.logs && state.logs.length > 0;
+      const isRunning = status === "inProgress";
+
+      if (!hasLogs && !isRunning) {
         return null;
       }
+
+      // If running but no logs, show a gentle "Finalizing..." message
+      // This prevents the UI gap when logs are cleared mid-process
+      if (!hasLogs && isRunning) {
+        return (
+          <Progress
+            logs={[{ message: "Finalizing results...", done: false }]}
+          />
+        );
+      }
+
       return <Progress logs={state.logs} />;
     },
   });
@@ -64,7 +91,7 @@ export function ResearchCanvas() {
             Delete these resources?
           </div>
           <Resources
-            resources={resources.filter((resource) =>
+            resources={stableResources.filter((resource) =>
               (args.urls || []).includes(resource.url)
             )}
             customWidth={200}
@@ -91,9 +118,11 @@ export function ResearchCanvas() {
     },
   });
 
-  const resources: Resource[] = state.resources || [];
+  // Use stable resources for display
+  const resources: Resource[] = stableResources;
   const setResources = (resources: Resource[]) => {
     setState({ ...state, resources });
+    setStableResources(resources);
   };
 
   // const [resources, setResources] = useState<Resource[]>(dummyResources);
