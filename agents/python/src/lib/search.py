@@ -155,9 +155,10 @@ async def search_node(state: AgentState, config: RunnableConfig):
         elif result:  # Tako returned results
             # Get iframe HTML for each Tako chart
             for chart in result:
+                pub_id = chart.get("pub_id")
                 embed_url = chart.get("embed_url")
-                if embed_url:
-                    iframe_html = await get_tako_chart_iframe(embed_url)
+                if pub_id or embed_url:
+                    iframe_html = await get_tako_chart_iframe(pub_id=pub_id, embed_url=embed_url)
                     chart["iframe_html"] = iframe_html
             tako_results.extend(result)
             print(f"  ✅ '{question}' - {len(result)} charts")
@@ -181,9 +182,10 @@ async def search_node(state: AgentState, config: RunnableConfig):
             if result:  # Tako returned results
                 # Get iframe HTML for each chart
                 for chart in result:
+                    pub_id = chart.get("pub_id")
                     embed_url = chart.get("embed_url")
-                    if embed_url:
-                        iframe_html = await get_tako_chart_iframe(embed_url)
+                    if pub_id or embed_url:
+                        iframe_html = await get_tako_chart_iframe(pub_id=pub_id, embed_url=embed_url)
                         chart["iframe_html"] = iframe_html
 
                 # STREAM: Add resources immediately (incremental emission)
@@ -282,10 +284,17 @@ async def search_node(state: AgentState, config: RunnableConfig):
             SystemMessage(content=f"Search results:\n{search_message}")
         )
 
+    # Add status update for resource extraction
+    state["logs"].append({"message": "Selecting most relevant resources...", "done": False})
+    await copilotkit_emit_state(config, state)
+
     # figure out which resources to use
     response = await model.bind_tools(
         [ExtractResources], tool_choice="ExtractResources", **ainvoke_kwargs
     ).ainvoke(extract_messages, config)
+
+    # Mark resource extraction as complete (cleared immediately after)
+    state["logs"][-1]["done"] = True
 
     state["logs"] = []
     await copilotkit_emit_state(config, state)

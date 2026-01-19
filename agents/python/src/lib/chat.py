@@ -3,7 +3,7 @@
 import re
 from typing import List, Literal, cast
 
-from copilotkit.langgraph import copilotkit_customize_config
+from copilotkit.langgraph import copilotkit_customize_config, copilotkit_emit_state
 from langchain.tools import tool
 from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig
@@ -142,6 +142,11 @@ async def chat_node(
                - Prefer exact entity/metric names from the knowledge base context for better search results
                - Note: Deep/complex queries are currently disabled"""
 
+    # Add status update for query analysis
+    state["logs"] = state.get("logs", [])
+    state["logs"].append({"message": "Analyzing your research query...", "done": False})
+    await copilotkit_emit_state(config, state)
+
     response = await model.bind_tools(
         [
             Search,
@@ -225,6 +230,10 @@ async def chat_node(
         config,
     )
 
+    # Mark query analysis as complete
+    state["logs"][-1]["done"] = True
+    await copilotkit_emit_state(config, state)
+
     ai_message = cast(AIMessage, response)
 
     if ai_message.tool_calls:
@@ -281,6 +290,11 @@ async def chat_node(
                 print(f"\n{'='*80}")
                 print(f"🔍 EXPLORE API CALL")
                 print(f"Research Question: {research_question}")
+
+                # Add status update for Tako explore
+                state["logs"].append({"message": "Exploring Tako knowledge graph...", "done": False})
+                await copilotkit_emit_state(config, state)
+
                 explore_results = await call_tako_explore(research_question)
                 explore_context = format_explore_results(explore_results)
 
@@ -306,6 +320,10 @@ async def chat_node(
                 else:
                     print(f"  ⚠️  No explore results found")
                 print(f"{'='*80}\n")
+
+                # Mark explore as complete
+                state["logs"][-1]["done"] = True
+                await copilotkit_emit_state(config, state)
             else:
                 print(f"⏭️  Explore API disabled (ENABLE_EXPLORE_API=False)")
 
@@ -344,6 +362,14 @@ async def chat_node(
                 question = q.get("question", "N/A")
                 print(f"  {i}. [{effort.upper()}] [{query_type}] {question}")
             print(f"{'='*80}\n")
+
+            # Add status update for generated questions
+            if data_questions:
+                state["logs"].append({
+                    "message": f"Generated {len(data_questions)} search questions",
+                    "done": True
+                })
+                await copilotkit_emit_state(config, state)
 
             return Command(
                 goto="search_node",
