@@ -20,7 +20,7 @@ class handler(BaseHTTPRequestHandler):
             height = request_data.get('height', 600)
 
             # Get environment variables
-            mcp_url = os.environ.get('MCP_SERVER_URL', 'http://localhost:8001')
+            mcp_url = os.environ.get('TAKO_MCP_URL', 'http://localhost:8001')
 
             # Call MCP server
             import asyncio

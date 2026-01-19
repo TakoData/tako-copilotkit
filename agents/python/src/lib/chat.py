@@ -3,7 +3,7 @@
 import re
 from typing import List, Literal, cast
 
-from copilotkit.langgraph import copilotkit_customize_config
+from copilotkit.langgraph import copilotkit_customize_config, copilotkit_emit_state
 from langchain.tools import tool
 from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig
@@ -196,6 +196,10 @@ async def chat_node(
         ],
         config,
     )
+
+    # Mark query analysis as complete
+    state["logs"][-1]["done"] = True
+    await copilotkit_emit_state(config, state)
 
     ai_message = cast(AIMessage, response)
 

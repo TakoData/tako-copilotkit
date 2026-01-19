@@ -103,8 +103,7 @@ async def search_node(state: AgentState, config: RunnableConfig):
     tako_results = []
 
     # Run Tavily web search and Tako knowledge search in parallel
-    #tavily_tasks = [async_tavily_search(query) for query in queries]
-    tavily_tasks = []
+    tavily_tasks = [async_tavily_search(query) for query in queries]
     tako_tasks = [call_tako_knowledge_search(question) for question in data_questions]
 
     all_tasks = tavily_tasks + tako_tasks
@@ -132,9 +131,10 @@ async def search_node(state: AgentState, config: RunnableConfig):
         elif result:  # Tako returned results
             # Get iframe HTML for each Tako chart
             for chart in result:
+                pub_id = chart.get("pub_id")
                 embed_url = chart.get("embed_url")
-                if embed_url:
-                    iframe_html = await get_tako_chart_iframe(embed_url)
+                if pub_id or embed_url:
+                    iframe_html = await get_tako_chart_iframe(pub_id=pub_id, embed_url=embed_url)
                     chart["iframe_html"] = iframe_html
             tako_results.extend(result)
         state["logs"][log_index]["done"] = True
@@ -203,10 +203,17 @@ async def search_node(state: AgentState, config: RunnableConfig):
             SystemMessage(content=f"Search results:\n{search_message}")
         )
 
+    # Add status update for resource extraction
+    state["logs"].append({"message": "Selecting most relevant resources...", "done": False})
+    await copilotkit_emit_state(config, state)
+
     # figure out which resources to use
     response = await model.bind_tools(
         [ExtractResources], tool_choice="ExtractResources", **ainvoke_kwargs
     ).ainvoke(extract_messages, config)
+
+    # Mark resource extraction as complete (cleared immediately after)
+    state["logs"][-1]["done"] = True
 
     state["logs"] = []
     await copilotkit_emit_state(config, state)
