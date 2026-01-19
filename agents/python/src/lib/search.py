@@ -103,8 +103,7 @@ async def search_node(state: AgentState, config: RunnableConfig):
     tako_results = []
 
     # Run Tavily web search and Tako knowledge search in parallel
-    #tavily_tasks = [async_tavily_search(query) for query in queries]
-    tavily_tasks = []
+    tavily_tasks = [async_tavily_search(query) for query in queries]
     tako_tasks = [call_tako_knowledge_search(question) for question in data_questions]
 
     all_tasks = tavily_tasks + tako_tasks
