@@ -18,23 +18,20 @@ class SimpleMCPClient:
         self.base_url = base_url.rstrip("/")
         self.session_id = None
         self.message_id = 0
+        self._responses = {}
         self._client = httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=10.0))
         self._sse_task = None
-        self._connected = False
 
     async def connect(self):
         """Connect to MCP server and get session ID via SSE."""
-        if self._connected and self.session_id:
-            return True
-
         print(f"🔗 Connecting to MCP server: {self.base_url}/sse")
         self._sse_task = asyncio.create_task(self._sse_reader())
 
         # Wait for session_id to be established
         for _ in range(50):
             if self.session_id:
+                # Small delay to ensure session is fully registered on server
                 await asyncio.sleep(0.2)
-                self._connected = True
                 print(f"✅ Connected to MCP server (session: {self.session_id[:8]}...)")
                 return True
             await asyncio.sleep(0.1)
@@ -43,7 +40,7 @@ class SimpleMCPClient:
         return False
 
     async def _sse_reader(self):
-        """Read SSE events from server to get session_id."""
+        """Read SSE events from server to get session_id and responses."""
         try:
             async with self._client.stream("GET", f"{self.base_url}/sse") as resp:
                 if resp.status_code != 200:
@@ -62,78 +59,91 @@ class SimpleMCPClient:
                         data = line[5:].strip()
                         if event_type == "endpoint" and "session_id=" in data:
                             self.session_id = data.split("session_id=")[1].split("&")[0]
-                            # Keep connection alive for proper MCP protocol
-                            # but don't block - return after getting session_id
-                            return
+                            print(f"   Received session_id: {self.session_id}")
+                        elif event_type == "message":
+                            try:
+                                msg = json.loads(data)
+                                msg_id = msg.get("id")
+                                if msg_id in self._responses:
+                                    self._responses[msg_id].set_result(msg)
+                            except Exception as e:
+                                print(f"Error parsing message: {data} {e}")
                         event_type = None
         except asyncio.CancelledError:
             pass
         except Exception as e:
-            print(f"❌ SSE reader error: {e}")
+            print(f"❌ SSE error: {e}")
+            import traceback
+            traceback.print_exc()
 
-    async def initialize(self):
-        """Initialize MCP connection."""
+    async def close(self):
+        """Close connection."""
+        if self._sse_task:
+            self._sse_task.cancel()
+            try:
+                await self._sse_task
+            except:
+                pass
+        if self._client:
+            await self._client.aclose()
+
+    async def _send(self, method: str, params: dict = None) -> dict:
+        """Send JSON-RPC message to server and wait for response via SSE."""
         if not self.session_id:
             raise RuntimeError("Not connected. Call connect() first.")
 
         self.message_id += 1
-        msg = {
-            "jsonrpc": "2.0",
-            "id": self.message_id,
-            "method": "initialize",
-            "params": {
+        msg_id = self.message_id
+        msg = {"jsonrpc": "2.0", "id": msg_id, "method": method}
+        if params:
+            msg["params"] = params
+
+        future = asyncio.get_event_loop().create_future()
+        self._responses[msg_id] = future
+
+        try:
+            resp = await self._client.post(
+                f"{self.base_url}/messages/?session_id={self.session_id}",
+                json=msg,
+            )
+            # Check for HTTP errors - if session not found, server may return 404/500
+            if resp.status_code >= 400:
+                error_text = resp.text
+                # If we get an error response, try to parse it as JSON
+                try:
+                    error_data = resp.json()
+                    error_msg = error_data.get("error", error_text)
+                except:
+                    error_msg = error_text
+                raise RuntimeError(
+                    f"HTTP {resp.status_code} from server: {error_msg} "
+                    f"(session_id: {self.session_id})"
+                )
+        except httpx.HTTPStatusError as e:
+            raise RuntimeError(
+                f"HTTP error {e.response.status_code}: {e.response.text} "
+                f"(session_id: {self.session_id})"
+            )
+
+        try:
+            return await asyncio.wait_for(future, timeout=120.0)
+        finally:
+            self._responses.pop(msg_id, None)
+
+    async def initialize(self):
+        """Initialize MCP connection."""
+        return await self._send(
+            "initialize",
+            {
                 "protocolVersion": "2024-11-05",
                 "capabilities": {},
                 "clientInfo": {"name": "tako-copilotkit-agent", "version": "1.0.0"},
             },
-        }
-
-        try:
-            print(f"📤 Sending initialize request to {self.base_url}/messages/?session_id={self.session_id}")
-            response = await self._client.post(
-                f"{self.base_url}/messages/?session_id={self.session_id}",
-                json=msg,
-            )
-
-            print(f"📥 Initialize response status: {response.status_code}")
-            if response.status_code == 200:
-                result = response.json()
-                print(f"📥 Initialize response: {json.dumps(result, indent=2)[:500]}")
-                print(f"✅ MCP session initialized")
-                return True
-
-            print(f"❌ MCP initialization failed: {response.status_code}")
-            print(f"Response: {response.text[:500]}")
-            return False
-
-        except Exception as e:
-            print(f"❌ MCP initialization error: {e}")
-            import traceback
-            traceback.print_exc()
-            return False
+        )
 
     async def call_tool(self, name: str, args: dict):
         """Call an MCP tool."""
-        if not self.session_id:
-            raise RuntimeError("Not connected. Call connect() first.")
-
-        self.message_id += 1
-        msg = {
-            "jsonrpc": "2.0",
-            "id": self.message_id,
-            "method": "tools/call",
-            "params": {"name": name, "arguments": args},
-        }
-
-        response = await self._client.post(
-            f"{self.base_url}/messages/?session_id={self.session_id}",
-            json=msg,
-        )
-
-        if response.status_code >= 400:
-            raise RuntimeError(f"HTTP {response.status_code}: {response.text}")
-
-        return response.json()
+        return await self._send("tools/call", {"name": name, "arguments": args})
 
     async def close(self):
         """Close connection."""
@@ -158,16 +168,12 @@ async def _get_mcp_client() -> SimpleMCPClient:
     global _mcp_client
     mcp_url = os.getenv("TAKO_MCP_URL", "http://localhost:8001")
 
-    # Create new client if needed
-    if _mcp_client is None:
+    # Create new client if needed or if session is lost
+    if _mcp_client is None or _mcp_client.session_id is None:
         _mcp_client = SimpleMCPClient(mcp_url)
-
-    # Connect and initialize if not already connected
-    if not _mcp_client._connected or _mcp_client.session_id is None:
         if not await _mcp_client.connect():
             raise RuntimeError("Failed to connect to MCP server")
-        if not await _mcp_client.initialize():
-            raise RuntimeError("Failed to initialize MCP session")
+        await _mcp_client.initialize()
 
     return _mcp_client
 
@@ -191,6 +197,14 @@ async def _call_mcp_tool(tool_name: str, arguments: Dict[str, Any]) -> Any:
         result = await client.call_tool(tool_name, arguments)
 
         print(f"✅ MCP tool call succeeded: {tool_name}")
+        print(f"   Raw result keys: {list(result.keys())}")
+        if "result" in result:
+            print(f"   Result keys: {list(result['result'].keys())}")
+            if "content" in result["result"]:
+                content = result["result"]["content"]
+                print(f"   Content type: {type(content)}, length: {len(content) if isinstance(content, (list, dict, str)) else 'N/A'}")
+                if isinstance(content, list) and len(content) > 0:
+                    print(f"   First content item: {content[0]}")
 
         # MCP protocol returns results in result.content array
         if "result" in result and "content" in result["result"]:
@@ -200,7 +214,13 @@ async def _call_mcp_tool(tool_name: str, arguments: Dict[str, Any]) -> Any:
                 # Get the text from the first content block
                 first_content = content[0]
                 if isinstance(first_content, dict) and "text" in first_content:
-                    return json.loads(first_content["text"])
+                    text = first_content["text"]
+                    if text and text.strip():
+                        try:
+                            return json.loads(text)
+                        except json.JSONDecodeError:
+                            # If it's not JSON, return as-is
+                            return text
                 return first_content
             return content
 
@@ -441,24 +461,57 @@ async def get_tako_chart_iframe(pub_id: str = None, embed_url: str = None) -> Op
     """
     # Use direct MCP connection if enabled and pub_id provided
     if USE_DIRECT_MCP and pub_id:
-        result = await _call_mcp_tool("open_chart_ui", {
-            "pub_id": pub_id,
-            "dark_mode": True,
-            "width": 900,
-            "height": 600
-        })
+        try:
+            client = await _get_mcp_client()
+            result = await client.call_tool("open_chart_ui", {
+                "pub_id": pub_id,
+                "dark_mode": True,
+                "width": 900,
+                "height": 600
+            })
 
-        if result and isinstance(result, list) and len(result) > 0:
-            # MCP returns UIResource objects
-            ui_resource = result[0]
-            if isinstance(ui_resource, dict) and "content" in ui_resource:
-                content = ui_resource["content"]
-                if isinstance(content, dict) and "htmlString" in content:
-                    print(f"✅ Got chart iframe HTML from MCP for pub_id: {pub_id}")
-                    return content["htmlString"]
+            # Extract content from MCP response
+            # Result format: {"result": {"content": [{"type": "resource", "resource": {...}}]}}
+            content = result.get("result", {}).get("content", [])
+            if not content:
+                print(f"❌ No content returned from open_chart_ui for pub_id: {pub_id}")
+                return None
 
-        print(f"❌ Failed to get chart iframe from MCP")
-        return None
+            # Find resource item with type "resource"
+            resource_item = next((c for c in content if c.get("type") == "resource"), None)
+            if not resource_item:
+                print(f"❌ No resource content item found (got types: {[c.get('type') for c in content]})")
+                return None
+
+            resource = resource_item.get("resource", {})
+
+            # MCP UI resources can have htmlString in different places depending on implementation
+            # Try multiple locations to be robust
+            html_content = None
+
+            # Direct htmlString field
+            if "htmlString" in resource:
+                html_content = resource["htmlString"]
+            # In content object
+            elif isinstance(resource.get("content"), dict) and "htmlString" in resource["content"]:
+                html_content = resource["content"]["htmlString"]
+            # In text field (fallback)
+            elif "text" in resource:
+                html_content = resource["text"]
+
+            if html_content and html_content.strip():
+                print(f"✅ Got chart iframe HTML from MCP for pub_id: {pub_id} ({len(html_content)} chars)")
+                return html_content
+
+            print(f"❌ No HTML content found in resource for pub_id: {pub_id}")
+            print(f"   Resource keys: {list(resource.keys())}")
+            return None
+
+        except Exception as e:
+            print(f"❌ Failed to get chart iframe from MCP: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
 
     # Legacy: Generate iframe HTML with dynamic resizing script
     if not embed_url:
