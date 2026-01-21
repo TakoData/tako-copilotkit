@@ -2,11 +2,6 @@
 Shared MCP client for Vercel serverless functions.
 This is a simplified version that doesn't maintain persistent connections.
 """
-import asyncio
-import json
-import os
-from typing import Optional
-
 import httpx
 
 

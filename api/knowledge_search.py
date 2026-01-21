@@ -4,9 +4,7 @@ Vercel serverless function for knowledge search.
 import json
 import os
 from http.server import BaseHTTPRequestHandler
-
-import httpx
-
+from .mcp_client import get_mcp_response
 
 class handler(BaseHTTPRequestHandler):
     def do_POST(self):
@@ -50,8 +48,6 @@ class handler(BaseHTTPRequestHandler):
 
     async def _call_mcp(self, mcp_url, api_token, query, count, search_effort):
         """Call MCP server and return results."""
-        from .mcp_client import get_mcp_response
-
         result = await get_mcp_response(
             mcp_url,
             "knowledge_search",

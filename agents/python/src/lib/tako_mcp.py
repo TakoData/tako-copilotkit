@@ -2,7 +2,6 @@
 
 import asyncio
 import os
-import traceback
 from typing import Any, Dict, List, Optional
 import json
 
@@ -71,7 +70,7 @@ class SimpleMCPClient:
                                 print(f"Error parsing message: {data} {e}")
                         event_type = None
         except asyncio.CancelledError:
-            pass
+            print(f"❌ SSE connection cancelled")
         except Exception as e:
             print(f"❌ SSE error: {e}")
             import traceback
@@ -84,7 +83,7 @@ class SimpleMCPClient:
             try:
                 await self._sse_task
             except:
-                pass
+                print(f"❌ SSE connection task not cancelled")
         if self._client:
             await self._client.aclose()
 
@@ -145,20 +144,6 @@ class SimpleMCPClient:
     async def call_tool(self, name: str, args: dict):
         """Call an MCP tool."""
         return await self._send("tools/call", {"name": name, "arguments": args})
-
-    async def close(self):
-        """Close connection."""
-        if self._sse_task:
-            self._sse_task.cancel()
-            try:
-                await self._sse_task
-            except:
-                pass
-        if self._client:
-            await self._client.aclose()
-        self._connected = False
-        self.session_id = None
-
 
 # Global MCP client instance (reused across calls)
 _mcp_client: Optional[SimpleMCPClient] = None

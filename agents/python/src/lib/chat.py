@@ -148,6 +148,7 @@ async def chat_node(
                - Focus on straightforward data lookups: "Country X GDP 2020-2024"
                - Use the entities, metrics, cohorts, and time periods listed in the knowledge base context above when available
                - Prefer exact entity/metric names from the knowledge base context for better search results
+               - 0-1 PREDICTION MARKET question if relevant: "What are prediction market odds for X in 2025?"
                - Note: Deep/complex queries are currently disabled"""
 
     # Add status update for query analysis
@@ -187,7 +188,7 @@ async def chat_node(
             - If a research question is already provided, YOU MUST NOT ASK FOR IT AGAIN
 
             CRITICAL - EMBEDDING TAKO CHARTS IN REPORT:
-            When writing your report, you can embed Tako chart visualizations using markers.
+            When writing your report, you can embed Tako chart visualizations using special markers.
 
             SYNTAX: [TAKO_CHART:exact_title_of_chart]
 
@@ -196,12 +197,19 @@ async def chat_node(
 
             **Remember: The charts above are already fetched and ready to embed. Use them liberally throughout your report!**
 
-            EXAMPLE:
+            IMPORTANT RULES:
+            - DO NOT use markdown image syntax like ![title](url) - this will NOT work
+            - DO NOT use HTML img tags - this will NOT work
+            - ONLY use the [TAKO_CHART:title] marker syntax
+            - DO NOT include external links like tradingeconomics.com
+            - ONLY use charts from the AVAILABLE TAKO CHARTS list above
+
+            EXAMPLE (CORRECT):
             ## Economic Growth Analysis
 
             China's economy has shown significant growth over the past decade...
 
-            [TAKO_CHART:China GDP Growth 2000-2020]
+            [TAKO_CHART:China GDP]
 
             The data visualization above shows the dramatic increase in GDP...
 
@@ -247,6 +255,16 @@ async def chat_node(
     if ai_message.tool_calls:
         if ai_message.tool_calls[0]["name"] == "WriteReport":
             report = ai_message.tool_calls[0]["args"].get("report", "")
+
+            # Clean up: Remove any markdown image links that the LLM incorrectly added
+            # Pattern: ![title](url) where url contains tradingeconomics, worldbank, etc.
+            import re
+            external_domains = r'(tradingeconomics|worldbank|imf|fred|ourworldindata|statista)'
+            report = re.sub(rf'!\[([^\]]+)\]\(https?://[^)]*{external_domains}[^)]*\)',
+                          r'', report, flags=re.IGNORECASE)
+
+            # Remove any other markdown images that aren't Tako charts
+            report = re.sub(r'!\[[^\]]*\]\([^)]+\)', '', report)
 
             # Post-process: Replace Tako chart markers with actual iframe HTML
             embedded_charts = []
