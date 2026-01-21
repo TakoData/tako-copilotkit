@@ -15,12 +15,13 @@ from tavily import TavilyClient
 
 from src.lib.model import get_model
 from src.lib.state import AgentState
-from src.lib.tako_mcp import call_tako_knowledge_search, get_tako_chart_iframe
+from src.lib.tako_mcp import call_tako_knowledge_search
 from src.lib.chat import ENABLE_DEEP_QUERIES
 
 
 # Configuration
 MAX_WEB_SEARCHES = 3
+MAX_TOTAL_RESOURCES = 10  # Maximum total resources to prevent context bloat
 
 class ResourceInput(BaseModel):
     """A resource with a short description"""
@@ -153,13 +154,6 @@ async def search_node(state: AgentState, config: RunnableConfig):
             tako_results.append({"error": str(result)})
             print(f"  ❌ '{question}' - ERROR: {result}")
         elif result:  # Tako returned results
-            # Get iframe HTML for each Tako chart
-            for chart in result:
-                pub_id = chart.get("pub_id")
-                embed_url = chart.get("embed_url")
-                if pub_id or embed_url:
-                    iframe_html = await get_tako_chart_iframe(pub_id=pub_id, embed_url=embed_url)
-                    chart["iframe_html"] = iframe_html
             tako_results.extend(result)
             print(f"  ✅ '{question}' - {len(result)} charts")
             for chart in result[:2]:  # Show first 2 chart titles
@@ -180,14 +174,6 @@ async def search_node(state: AgentState, config: RunnableConfig):
         try:
             result = await call_tako_knowledge_search(question, search_effort="deep")
             if result:  # Tako returned results
-                # Get iframe HTML for each chart
-                for chart in result:
-                    pub_id = chart.get("pub_id")
-                    embed_url = chart.get("embed_url")
-                    if pub_id or embed_url:
-                        iframe_html = await get_tako_chart_iframe(pub_id=pub_id, embed_url=embed_url)
-                        chart["iframe_html"] = iframe_html
-
                 # STREAM: Add resources immediately (incremental emission)
                 # This allows frontend to show charts as they arrive
                 existing_urls = {r.get("url") for r in state["resources"]}
@@ -197,10 +183,11 @@ async def search_node(state: AgentState, config: RunnableConfig):
                             "url": chart["url"],
                             "title": chart["title"],
                             "description": chart["description"],
+                            "content": chart["description"],  # Use description as content
                             "resource_type": "tako_chart",
                             "source": "Tako",
                             "pub_id": chart.get("pub_id"),
-                            "iframe_html": chart.get("iframe_html"),
+                            "embed_url": chart.get("embed_url"),
                         })
                         existing_urls.add(chart["url"])
 
@@ -302,7 +289,7 @@ async def search_node(state: AgentState, config: RunnableConfig):
     ai_message_response = cast(AIMessage, response)
     resources = ai_message_response.tool_calls[0]["args"]["resources"]
 
-    # Tag resources with resource_type
+    # Tag resources with resource_type and attach content
     for resource in resources:
         # Check if this resource is from Tako by matching URL or pub_id
         is_tako = False
@@ -315,14 +302,35 @@ async def search_node(state: AgentState, config: RunnableConfig):
                 resource["resource_type"] = "tako_chart"
                 resource["source"] = "Tako"
                 resource["pub_id"] = tako_result.get("pub_id")
-                resource["iframe_html"] = tako_result.get("iframe_html")
+                # Store truncated description as content (no iframe HTML)
+                resource["content"] = tako_result.get("description", "")
                 break
 
         if not is_tako:
             resource["resource_type"] = "web"
             resource["source"] = "Tavily Web Search"
+            # Find matching Tavily result and use its content field (summary)
+            for search_result in search_results:
+                if isinstance(search_result, dict) and "results" in search_result:
+                    for tavily_item in search_result["results"]:
+                        if tavily_item.get("url") == resource.get("url"):
+                            # Use Tavily's content summary directly
+                            resource["content"] = tavily_item.get("content", "")
+                            break
 
-    state["resources"].extend(resources)
+    # Enforce resource limit to prevent context bloat
+    current_count = len(state["resources"])
+    remaining_slots = MAX_TOTAL_RESOURCES - current_count
+
+    if remaining_slots > 0:
+        resources_to_add = resources[:remaining_slots]
+        state["resources"].extend(resources_to_add)
+
+        if len(resources) > remaining_slots:
+            print(f"⚠️  Resource limit reached ({MAX_TOTAL_RESOURCES}). Added {len(resources_to_add)}/{len(resources)} resources.")
+    else:
+        print(f"⚠️  Resource limit reached ({MAX_TOTAL_RESOURCES}). No new resources added.")
+        resources_to_add = []
 
     # Only add ToolMessage response if we came from a Search tool call
     # (GenerateDataQuestions already has its response added in chat_node)
@@ -330,7 +338,7 @@ async def search_node(state: AgentState, config: RunnableConfig):
         state["messages"].append(
             ToolMessage(
                 tool_call_id=ai_message.tool_calls[0]["id"],
-                content=f"Added the following resources: {resources}",
+                content=f"Added the following resources: {resources_to_add}",
             )
         )
 

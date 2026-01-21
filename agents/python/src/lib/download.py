@@ -36,6 +36,13 @@ async def _download_resource(url: str):
                 response.raise_for_status()
                 html_content = await response.text()
                 markdown_content = html2text.html2text(html_content)
+
+                # Truncate to first 3000 chars to reduce context bloat
+                # Full web articles can be 50KB+, we only need key info
+                MAX_CONTENT_LENGTH = 3000
+                if len(markdown_content) > MAX_CONTENT_LENGTH:
+                    markdown_content = markdown_content[:MAX_CONTENT_LENGTH] + "\n\n[... content truncated for brevity ...]"
+
                 _RESOURCE_CACHE[url] = markdown_content
                 return markdown_content
     except Exception as e:  # pylint: disable=broad-except

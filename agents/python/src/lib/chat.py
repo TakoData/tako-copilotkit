@@ -12,7 +12,7 @@ from langgraph.types import Command
 from src.lib.download import get_resource
 from src.lib.model import get_model
 from src.lib.state import AgentState, DataQuestion
-from src.lib.tako_mcp import call_tako_explore, format_explore_results
+from src.lib.tako_mcp import call_tako_explore, format_explore_results, get_tako_chart_iframe
 
 
 # Feature toggles
@@ -104,10 +104,11 @@ async def chat_node(
     available_tako_charts = []
 
     for resource in state["resources"]:
-        # Tako charts already have descriptions, don't fetch content
+        # Tako charts - use stored description as content
         if resource.get("resource_type") == "tako_chart":
             title = resource.get("title", "")
-            iframe_html = resource.get("iframe_html", "")
+            pub_id = resource.get("pub_id")
+            embed_url = resource.get("embed_url")
             description = resource.get("description", "")
 
             # Add to resources with description as content
@@ -116,15 +117,19 @@ async def chat_node(
                 "content": description
             })
 
-            # Build Tako charts map for post-processing
-            if title and iframe_html:
-                tako_charts_map[title] = iframe_html
+            # Build Tako charts map for post-processing (generate iframe on demand)
+            if title and (pub_id or embed_url):
+                # Store pub_id/embed_url for later iframe generation
+                tako_charts_map[title] = {"pub_id": pub_id, "embed_url": embed_url}
                 available_tako_charts.append(f"  - **{title}**\n    Description: {description}")
         else:
-            # Web resources: fetch content
-            content = get_resource(resource["url"])
-            if content == "ERROR":
-                continue
+            # Web resources: use pre-stored Tavily summary (no download needed)
+            content = resource.get("content", "")
+            if not content:
+                # Fallback: download if content is missing (shouldn't happen normally)
+                content = get_resource(resource["url"])
+                if content == "ERROR":
+                    continue
             resources.append({**resource, "content": content})
 
     available_tako_charts_str = "\n".join(available_tako_charts) if available_tako_charts else "  (No Tako charts available yet)"
@@ -268,22 +273,41 @@ async def chat_node(
 
             # Post-process: Replace Tako chart markers with actual iframe HTML
             embedded_charts = []
-            def replace_chart_marker(match):
+            async def replace_chart_marker_async(match):
                 chart_title = match.group(1).strip()
                 if chart_title in tako_charts_map:
                     embedded_charts.append(chart_title)
-                    iframe_html = tako_charts_map[chart_title]
-                    # Remove script tags - resize listener is handled in React component
-                    iframe_only = re.sub(r'<script.*?</script>', '', iframe_html, flags=re.DOTALL)
-                    return "\n\n" + iframe_only + "\n\n"
+                    chart_info = tako_charts_map[chart_title]
+                    # Generate iframe HTML on demand
+                    iframe_html = await get_tako_chart_iframe(
+                        pub_id=chart_info.get("pub_id"),
+                        embed_url=chart_info.get("embed_url")
+                    )
+                    if iframe_html:
+                        # Remove script tags - resize listener is handled in React component
+                        iframe_only = re.sub(r'<script.*?</script>', '', iframe_html, flags=re.DOTALL)
+                        return "\n\n" + iframe_only + "\n\n"
+                    else:
+                        print(f"⚠️  Failed to generate iframe for: '{chart_title}'")
+                        return f"\n\n[Chart iframe generation failed: {chart_title}]\n\n"
                 else:
                     # Chart not found, leave marker but add warning
                     print(f"⚠️  Chart not found for embedding: '{chart_title}'")
                     print(f"   Available charts: {list(tako_charts_map.keys())[:3]}")
                     return f"\n\n[Chart not found: {chart_title}]\n\n"
 
-            # Replace [TAKO_CHART:title] with actual iframe HTML
-            processed_report = re.sub(r'\[TAKO_CHART:([^\]]+)\]', replace_chart_marker, report)
+            # Find all chart markers and replace them asynchronously
+            import asyncio
+            chart_markers = re.finditer(r'\[TAKO_CHART:([^\]]+)\]', report)
+            replacements = []
+            for match in chart_markers:
+                replacement = await replace_chart_marker_async(match)
+                replacements.append((match.start(), match.end(), replacement))
+
+            # Apply replacements in reverse order to preserve positions
+            processed_report = report
+            for start, end, replacement in reversed(replacements):
+                processed_report = processed_report[:start] + replacement + processed_report[end:]
 
             # Log embedded charts
             if embedded_charts:
