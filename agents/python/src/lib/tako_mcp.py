@@ -12,6 +12,11 @@ TAKO_URL = os.getenv("TAKO_URL", "http://localhost:8000").rstrip("/")
 MCP_URL = os.getenv("TAKO_MCP_URL", "http://localhost:8001").rstrip("/")
 
 
+class SessionExpiredException(Exception):
+    """Exception raised when Tako MCP server session expires (410 response)."""
+    pass
+
+
 class SimpleMCPClient:
     """Minimal MCP client for Tako server following proper MCP protocol."""
 
@@ -88,6 +93,30 @@ class SimpleMCPClient:
         if self._client:
             await self._client.aclose()
 
+    async def reconnect(self):
+        """Reconnect to MCP server with new session."""
+        print(f"🔄 Reconnecting to MCP server...")
+
+        # Close existing connection
+        if self._sse_task and not self._sse_task.done():
+            self._sse_task.cancel()
+            try:
+                await self._sse_task
+            except asyncio.CancelledError:
+                pass
+
+        # Clear session state
+        self.session_id = None
+        self._responses.clear()
+
+        # Establish new connection
+        if not await self.connect():
+            raise RuntimeError(f"Failed to reconnect to MCP server {self.base_url}")
+
+        # Re-initialize
+        await self.initialize()
+        print(f"✅ Reconnected successfully (session: {self.session_id[:8]}...)")
+
     async def _send(self, method: str, params: dict = None) -> dict:
         """Send JSON-RPC message to server and wait for response via SSE."""
         if not self.session_id:
@@ -107,20 +136,43 @@ class SimpleMCPClient:
                 f"{self.base_url}/messages/?session_id={self.session_id}",
                 json=msg,
             )
-            # Check for HTTP errors - if session not found, server may return 404/500
+            # Check for HTTP errors
             if resp.status_code >= 400:
                 error_text = resp.text
                 # If we get an error response, try to parse it as JSON
                 try:
                     error_data = resp.json()
                     error_msg = error_data.get("error", error_text)
-                except:
+
+                    # Handle 410 Gone - session expired/not found
+                    if resp.status_code == 410:
+                        print(f"⚠️  Session expired (410), needs reconnection")
+                        if error_data.get("reconnect") or "expired" in error_msg.lower():
+                            raise SessionExpiredException(
+                                f"Session {self.session_id[:8]}... expired or not found. "
+                                "Reconnection required."
+                            )
+                except json.JSONDecodeError:
                     error_msg = error_text
+                    # Check if it's still a 410 even if JSON parsing failed
+                    if resp.status_code == 410:
+                        print(f"⚠️  Session expired (410), needs reconnection")
+                        raise SessionExpiredException(
+                            f"Session {self.session_id[:8]}... expired or not found. "
+                            "Reconnection required."
+                        )
+
                 raise RuntimeError(
                     f"HTTP {resp.status_code} from server: {error_msg} "
                     f"(session_id: {self.session_id})"
                 )
         except httpx.HTTPStatusError as e:
+            # Check for 410 in HTTPStatusError as well
+            if e.response.status_code == 410:
+                print(f"⚠️  Session expired (410), needs reconnection")
+                raise SessionExpiredException(
+                    f"Session expired or not found. Reconnection required."
+                )
             raise RuntimeError(
                 f"HTTP error {e.response.status_code}: {e.response.text} "
                 f"(session_id: {self.session_id})"
@@ -164,13 +216,14 @@ async def _get_mcp_client() -> SimpleMCPClient:
     return _mcp_client
 
 
-async def _call_mcp_tool(tool_name: str, arguments: Dict[str, Any]) -> Any:
+async def _call_mcp_tool(tool_name: str, arguments: Dict[str, Any], retry_count: int = 1) -> Any:
     """
     Call Tako MCP server tool via proper MCP protocol with session management.
 
     Args:
         tool_name: Name of the MCP tool to call (e.g., "knowledge_search")
         arguments: Tool arguments as dict
+        retry_count: Number of retries on session expiry (default: 1)
 
     Returns:
         Tool result from MCP server
@@ -178,45 +231,60 @@ async def _call_mcp_tool(tool_name: str, arguments: Dict[str, Any]) -> Any:
     print(f"🔧 MCP Mode: DIRECT")
     print(f"🔗 Calling MCP tool: {tool_name}")
 
-    try:
-        client = await _get_mcp_client()
-        result = await client.call_tool(tool_name, arguments)
+    for attempt in range(retry_count + 1):
+        try:
+            client = await _get_mcp_client()
+            result = await client.call_tool(tool_name, arguments)
 
-        print(f"✅ MCP tool call succeeded: {tool_name}")
-        print(f"   Raw result keys: {list(result.keys())}")
-        if "result" in result:
-            print(f"   Result keys: {list(result['result'].keys())}")
-            if "content" in result["result"]:
+            print(f"✅ MCP tool call succeeded: {tool_name}")
+            print(f"   Raw result keys: {list(result.keys())}")
+            if "result" in result:
+                print(f"   Result keys: {list(result['result'].keys())}")
+                if "content" in result["result"]:
+                    content = result["result"]["content"]
+                    print(f"   Content type: {type(content)}, length: {len(content) if isinstance(content, (list, dict, str)) else 'N/A'}")
+                    if isinstance(content, list) and len(content) > 0:
+                        print(f"   First content item: {content[0]}")
+
+            # MCP protocol returns results in result.content array
+            if "result" in result and "content" in result["result"]:
                 content = result["result"]["content"]
-                print(f"   Content type: {type(content)}, length: {len(content) if isinstance(content, (list, dict, str)) else 'N/A'}")
+                # Content is typically an array of content blocks
                 if isinstance(content, list) and len(content) > 0:
-                    print(f"   First content item: {content[0]}")
+                    # Get the text from the first content block
+                    first_content = content[0]
+                    if isinstance(first_content, dict) and "text" in first_content:
+                        text = first_content["text"]
+                        if text and text.strip():
+                            try:
+                                return json.loads(text)
+                            except json.JSONDecodeError:
+                                # If it's not JSON, return as-is
+                                return text
+                    return first_content
+                return content
 
-        # MCP protocol returns results in result.content array
-        if "result" in result and "content" in result["result"]:
-            content = result["result"]["content"]
-            # Content is typically an array of content blocks
-            if isinstance(content, list) and len(content) > 0:
-                # Get the text from the first content block
-                first_content = content[0]
-                if isinstance(first_content, dict) and "text" in first_content:
-                    text = first_content["text"]
-                    if text and text.strip():
-                        try:
-                            return json.loads(text)
-                        except json.JSONDecodeError:
-                            # If it's not JSON, return as-is
-                            return text
-                return first_content
-            return content
+            return result.get("result", {})
 
-        return result.get("result", {})
+        except SessionExpiredException as e:
+            if attempt < retry_count:
+                print(f"⚠️  Session expired, retrying ({attempt + 1}/{retry_count})...")
+                # Force reconnection by clearing global client
+                global _mcp_client
+                if _mcp_client:
+                    await _mcp_client.reconnect()
+                continue
+            else:
+                print(f"❌ Session expired after {retry_count} retries: {e}")
+                raise
 
-    except Exception as e:
-        print(f"❌ Failed to call MCP tool {tool_name}: {e}")
-        import traceback
-        traceback.print_exc()
-        return None
+        except Exception as e:
+            print(f"❌ Failed to call MCP tool {tool_name}: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+
+    return None
 
 
 async def call_tako_knowledge_search(
