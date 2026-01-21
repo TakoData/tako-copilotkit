@@ -9,6 +9,7 @@ import httpx
 
 # Tako base URL for generating embed URLs
 TAKO_URL = os.getenv("TAKO_URL", "http://localhost:8000").rstrip("/")
+MCP_URL = os.getenv("TAKO_MCP_URL", "http://localhost:8001").rstrip("/")
 
 
 class SimpleMCPClient:
@@ -152,13 +153,12 @@ _mcp_client: Optional[SimpleMCPClient] = None
 async def _get_mcp_client() -> SimpleMCPClient:
     """Get or create MCP client with proper session."""
     global _mcp_client
-    mcp_url = os.getenv("TAKO_MCP_URL", "http://localhost:8001")
 
     # Create new client if needed or if session is lost
     if _mcp_client is None or _mcp_client.session_id is None:
-        _mcp_client = SimpleMCPClient(mcp_url)
+        _mcp_client = SimpleMCPClient(MCP_URL)
         if not await _mcp_client.connect():
-            raise RuntimeError("Failed to connect to MCP server")
+            raise RuntimeError(f"Failed to connect to MCP server {MCP_URL}")
         await _mcp_client.initialize()
 
     return _mcp_client
