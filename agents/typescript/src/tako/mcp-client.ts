@@ -7,10 +7,6 @@
 
 import { MultiServerMCPClient } from "@langchain/mcp-adapters";
 
-// Feature flag: Use direct MCP connection (true) or legacy proxy (false)
-const USE_DIRECT_MCP = true;
-
-// Cache for MCP client initialization to avoid repeated connections
 let mcpCache: { client: MultiServerMCPClient | null; tools: any[] } | null = null;
 let initializationPromise: Promise<{ client: MultiServerMCPClient | null; tools: any[] }> | null = null;
 
@@ -28,13 +24,10 @@ async function initializeWithTimeout(timeoutMs = 3000) {
     return { client: null, tools: [] };
   }
 
-  console.log(`🔧 MCP Mode: ${USE_DIRECT_MCP ? 'DIRECT' : 'PROXY'}`);
-  console.log(`🔗 Connecting to: ${takoMcpUrl}${USE_DIRECT_MCP ? '/sse' : ''}`);
-
   const mcpServers = {
     tako: {
       transport: "http" as const,
-      url: USE_DIRECT_MCP ? `${takoMcpUrl}/sse` : takoMcpUrl,
+      url: `${takoMcpUrl}/sse`,
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${takoApiToken}`,
@@ -55,9 +48,6 @@ async function initializeWithTimeout(timeoutMs = 3000) {
       useStandardContentBlocks: true,
     });
 
-    console.log("Loading Tako MCP tools from:", USE_DIRECT_MCP ? `${takoMcpUrl}/sse` : takoMcpUrl);
-
-    // Race between getTools and timeout
     const tools = await Promise.race([
       client.getTools(),
       timeoutPromise

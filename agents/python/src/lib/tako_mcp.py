@@ -2,13 +2,11 @@
 
 import asyncio
 import os
+import traceback
 from typing import Any, Dict, List, Optional
 import json
 
 import httpx
-
-# Feature flag: Use direct MCP connection (True) or legacy proxy (False)
-USE_DIRECT_MCP = True
 
 
 class SimpleMCPClient:
@@ -252,106 +250,41 @@ async def call_tako_knowledge_search(
     tako_api_token = os.getenv("TAKO_API_TOKEN", "")
 
     # Use direct MCP connection if enabled
-    if USE_DIRECT_MCP:
-        result = await _call_mcp_tool("knowledge_search", {
-            "query": query,
-            "api_token": tako_api_token,
-            "count": count,
-            "search_effort": search_effort,
-            "country_code": "US",
-            "locale": "en-US"
-        })
+    result = await _call_mcp_tool("knowledge_search", {
+        "query": query,
+        "api_token": tako_api_token,
+        "count": count,
+        "search_effort": search_effort,
+        "country_code": "US",
+        "locale": "en-US"
+    })
 
-        if result and "results" in result:
-            # Convert MCP result format to expected format
-            formatted_results = []
-            for card in result["results"]:
-                pub_id = card.get("card_id")
-                title = card.get("title", "")
-                description = card.get("description", "")
-                url = card.get("url", "")
+    if result and "results" in result:
+        # Convert MCP result format to expected format
+        formatted_results = []
+        for card in result["results"]:
+            pub_id = card.get("card_id")
+            title = card.get("title", "")
+            description = card.get("description", "")
+            url = card.get("url", "")
 
-                formatted_results.append({
-                    "type": "tako_chart",
-                    "content": description,
-                    "pub_id": pub_id,
-                    "embed_url": url,
-                    "title": title,
-                    "description": description,
-                    "url": url
-                })
+            formatted_results.append({
+                "type": "tako_chart",
+                "content": description,
+                "pub_id": pub_id,
+                "embed_url": url,
+                "title": title,
+                "description": description,
+                "url": url
+            })
 
-            print(f"✅ Tako MCP search succeeded for '{query}': {len(formatted_results)} results")
-            if formatted_results:
-                for i, r in enumerate(formatted_results[:2]):
-                    print(f"  [{i+1}] {r['title'][:60]} (pub_id: {r['pub_id']})")
-            return formatted_results
+        print(f"✅ Tako MCP search succeeded for '{query}': {len(formatted_results)} results")
+        if formatted_results:
+            for i, r in enumerate(formatted_results[:2]):
+                print(f"  [{i+1}] {r['title'][:60]} (pub_id: {r['pub_id']})")
+        return formatted_results
 
-        print(f"❌ Tako MCP search failed or returned no results")
-        return []
-
-    # Legacy: Direct API call (when USE_DIRECT_MCP=False)
-    tako_api_url = os.getenv("TAKO_API_URL", "http://localhost:8000")
-
-    # Add protocol if missing
-    if tako_api_url and not tako_api_url.startswith(("http://", "https://")):
-        tako_api_url = f"https://{tako_api_url}"
-
-    try:
-        async with httpx.AsyncClient(timeout=120.0) as client:  # Increased timeout for Tako searches
-            # Call Tako backend API directly
-            response = await client.post(
-                f"{tako_api_url}/api/v1/knowledge_search/",
-                json={
-                    "inputs": {"text": query},  # Correct format for Tako API
-                    "count": count,
-                    "search_effort": search_effort,
-                    "country_code": "US",
-                    "locale": "en-US",
-                    "source_indexes": ["tako"]
-                },
-                headers={
-                    "X-API-Key": tako_api_token,
-                    "Content-Type": "application/json"
-                }
-            )
-
-            if response.status_code == 200:
-                data = response.json()
-                knowledge_cards = data.get("outputs", {}).get("knowledge_cards", [])
-                formatted_results = []
-                for card in knowledge_cards:
-                    card_id = card.get("card_id")
-                    title = card.get("title", "")
-                    description = card.get("description", "")
-                    embed_url = card.get("embed_url", "")
-                    print(f"  DEBUG: card_id={card_id}, embed_url={embed_url}, title={title[:50]}...")
-
-                    formatted_results.append({
-                        "type": "tako_chart",
-                        "content": description,
-                        "pub_id": card_id,
-                        "embed_url": embed_url,
-                        "title": title,
-                        "description": description,
-                        "url": embed_url
-                    })
-
-                print(f"✓ Tako search succeeded for '{query}': {len(formatted_results)} results")
-                if formatted_results:
-                    for i, r in enumerate(formatted_results[:2]):
-                        print(f"  [{i+1}] {r['title'][:60]} (pub_id: {r['pub_id']})")
-                return formatted_results
-
-            print(f"✗ Tako knowledge search failed: {response.status_code}")
-            print(f"Response: {response.text[:200]}")
-            return []
-
-    except Exception as e:
-        print(f"Failed to call Tako knowledge search: {e}")
-        import traceback
-        traceback.print_exc()
-        return []
+    return []
 
 
 async def call_tako_explore(
@@ -373,54 +306,17 @@ async def call_tako_explore(
     tako_api_token = os.getenv("TAKO_API_TOKEN", "")
 
     # Use direct MCP connection if enabled
-    if USE_DIRECT_MCP:
-        result = await _call_mcp_tool("explore_knowledge_graph", {
-            "query": query,
-            "api_token": tako_api_token,
-            "node_types": node_types,
-            "limit": limit
-        })
+    result = await _call_mcp_tool("explore_knowledge_graph", {
+        "query": query,
+        "api_token": tako_api_token,
+        "node_types": node_types,
+        "limit": limit
+    })
 
-        if result:
-            print(f"✅ Tako MCP explore succeeded: {result.get('total_matches', 0)} matches")
-            return result
+    if result:
+        return result
 
-        print(f"❌ Tako MCP explore failed or returned no results")
-        return {"entities": [], "metrics": [], "cohorts": [], "time_periods": [], "total_matches": 0}
-
-    # Legacy: Direct API call (when USE_DIRECT_MCP=False)
-    tako_api_url = os.getenv("TAKO_API_URL", "http://localhost:8000")
-
-    if tako_api_url and not tako_api_url.startswith(("http://", "https://")):
-        tako_api_url = f"https://{tako_api_url}"
-
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(
-                f"{tako_api_url}/api/v1/explore/",
-                json={
-                    "query": query,
-                    "node_types": node_types,
-                    "limit": limit
-                },
-                headers={
-                    "X-API-Key": tako_api_token,
-                    "Content-Type": "application/json"
-                }
-            )
-
-            if response.status_code == 200:
-                data = response.json()
-                print(f"✓ Tako explore succeeded: {data.get('total_matches', 0)} matches")
-                return data
-
-            print(f"✗ Tako explore failed: {response.status_code}")
-            return {"entities": [], "metrics": [], "cohorts": [], "time_periods": [], "total_matches": 0}
-
-    except Exception as e:
-        print(f"Failed to call Tako explore: {e}")
-        return {"entities": [], "metrics": [], "cohorts": [], "time_periods": [], "total_matches": 0}
-
+    return {"entities": [], "metrics": [], "cohorts": [], "time_periods": [], "total_matches": 0}
 
 def format_explore_results(explore_data: Dict[str, Any]) -> str:
     """Format explore results for LLM context."""
@@ -460,7 +356,7 @@ async def get_tako_chart_iframe(pub_id: str = None, embed_url: str = None) -> Op
         Iframe HTML string with resizing script or None if failed
     """
     # Use direct MCP connection if enabled and pub_id provided
-    if USE_DIRECT_MCP and pub_id:
+    if pub_id:
         try:
             client = await _get_mcp_client()
             result = await client.call_tool("open_chart_ui", {
@@ -474,70 +370,31 @@ async def get_tako_chart_iframe(pub_id: str = None, embed_url: str = None) -> Op
             # Result format: {"result": {"content": [{"type": "resource", "resource": {...}}]}}
             content = result.get("result", {}).get("content", [])
             if not content:
-                print(f"❌ No content returned from open_chart_ui for pub_id: {pub_id}")
                 return None
 
             # Find resource item with type "resource"
             resource_item = next((c for c in content if c.get("type") == "resource"), None)
             if not resource_item:
-                print(f"❌ No resource content item found (got types: {[c.get('type') for c in content]})")
                 return None
 
             resource = resource_item.get("resource", {})
 
-            # MCP UI resources can have htmlString in different places depending on implementation
-            # Try multiple locations to be robust
             html_content = None
-
-            # Direct htmlString field
             if "htmlString" in resource:
                 html_content = resource["htmlString"]
-            # In content object
             elif isinstance(resource.get("content"), dict) and "htmlString" in resource["content"]:
                 html_content = resource["content"]["htmlString"]
-            # In text field (fallback)
             elif "text" in resource:
                 html_content = resource["text"]
 
             if html_content and html_content.strip():
-                print(f"✅ Got chart iframe HTML from MCP for pub_id: {pub_id} ({len(html_content)} chars)")
                 return html_content
 
-            print(f"❌ No HTML content found in resource for pub_id: {pub_id}")
-            print(f"   Resource keys: {list(resource.keys())}")
             return None
 
         except Exception as e:
-            print(f"❌ Failed to get chart iframe from MCP: {e}")
-            import traceback
             traceback.print_exc()
             return None
 
-    # Legacy: Generate iframe HTML with dynamic resizing script
-    if not embed_url:
-        print(f"❌ No embed_url provided for iframe generation")
+    else:
         return None
-
-    iframe_html = f'''<iframe
-  width="100%"
-  src="{embed_url}"
-  scrolling="no"
-  frameborder="0"
-></iframe>
-
-<script type="text/javascript">
-!function() {{
-  "use strict";
-  window.addEventListener("message", function(e) {{
-    const d = e.data;
-    if (d.type !== "tako::resize") return;
-
-    for (let iframe of document.querySelectorAll("iframe")) {{
-      if (iframe.contentWindow !== e.source) continue;
-      iframe.style.height = (d.height + 4) + "px";
-    }}
-  }});
-}}();
-</script>'''
-
-    return iframe_html
