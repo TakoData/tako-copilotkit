@@ -8,6 +8,9 @@ import json
 
 import httpx
 
+# Tako base URL for generating embed URLs
+TAKO_URL = os.getenv("TAKO_URL", "http://localhost:8000").rstrip("/")
+
 
 class SimpleMCPClient:
     """Minimal MCP client for Tako server following proper MCP protocol."""
@@ -260,19 +263,33 @@ async def call_tako_knowledge_search(
     })
 
     if result and "results" in result:
+        # Debug: Log raw MCP results
+        print(f"📊 Raw MCP results ({len(result['results'])} items):")
+        for i, card in enumerate(result["results"][:3], 1):
+            print(f"  [{i}] card_id={card.get('card_id')}, title={card.get('title', '')[:40]}")
+            print(f"      url={card.get('url', 'N/A')}")
+            open_ui_args = card.get('open_ui_args', {})
+            print(f"      pub_id={open_ui_args.get('pub_id', 'N/A')}")
+
         # Convert MCP result format to expected format
         formatted_results = []
         for card in result["results"]:
-            pub_id = card.get("card_id")
+            # Get pub_id from open_ui_args (new format)
+            open_ui_args = card.get("open_ui_args", {})
+            pub_id = open_ui_args.get("pub_id") or card.get("card_id")
+
             title = card.get("title", "")
             description = card.get("description", "")
-            url = card.get("url", "")
+
+            # url is now null in the new format, construct embed URL from pub_id
+            url = card.get("url") or f"{TAKO_URL}/card/{pub_id}" if pub_id else None
+            embed_url = f"{TAKO_URL}/embed/{pub_id}/?theme=dark" if pub_id else None
 
             formatted_results.append({
                 "type": "tako_chart",
                 "content": description,
                 "pub_id": pub_id,
-                "embed_url": url,
+                "embed_url": embed_url,
                 "title": title,
                 "description": description,
                 "url": url

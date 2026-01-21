@@ -87,6 +87,14 @@ async def chat_node(
         ],
     )
 
+    # Debug: Log message history to diagnose OpenAI error
+    print(f"\n🔍 chat_node: Received {len(state['messages'])} messages:")
+    for i, msg in enumerate(state["messages"][-6:], max(0, len(state['messages'])-5)):
+        msg_type = type(msg).__name__
+        has_tool_calls = hasattr(msg, 'tool_calls') and msg.tool_calls
+        tool_name = msg.tool_calls[0]["name"] if has_tool_calls else "N/A"
+        print(f"  [{i}] {msg_type}{f' (tool_calls: {tool_name})' if has_tool_calls else ''}")
+
     state["resources"] = state.get("resources", [])
     research_question = state.get("research_question", "")
     report = state.get("report", "")
