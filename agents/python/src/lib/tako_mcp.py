@@ -388,13 +388,43 @@ async def get_tako_chart_iframe(pub_id: str = None, embed_url: str = None) -> Op
                 html_content = resource["text"]
 
             if html_content and html_content.strip():
+                print(f"✅ Got chart iframe HTML from MCP for pub_id: {pub_id} ({len(html_content)} chars)")
                 return html_content
 
+            print(f"❌ No HTML content found in resource for pub_id: {pub_id}")
             return None
 
         except Exception as e:
+            print(f"❌ Failed to get chart iframe from MCP: {e}")
+            import traceback
             traceback.print_exc()
-            return None
+            # Fall through to embed_url fallback
 
-    else:
-        return None
+    # Fallback: Generate iframe HTML with embed_url
+    if embed_url:
+        print(f"⚠️  Using embed_url fallback for chart")
+        iframe_html = f'''<iframe
+  width="100%"
+  src="{embed_url}"
+  scrolling="no"
+  frameborder="0"
+></iframe>
+
+<script type="text/javascript">
+!function() {{
+  "use strict";
+  window.addEventListener("message", function(e) {{
+    const d = e.data;
+    if (d.type !== "tako::resize") return;
+
+    for (let iframe of document.querySelectorAll("iframe")) {{
+      if (iframe.contentWindow !== e.source) continue;
+      iframe.style.height = (d.height + 4) + "px";
+    }}
+  }});
+}}();
+</script>'''
+        return iframe_html
+
+    print(f"❌ No pub_id or embed_url provided for iframe generation")
+    return None
