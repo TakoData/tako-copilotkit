@@ -3,7 +3,7 @@
 import re
 from typing import List, Literal, cast
 
-from copilotkit.langgraph import copilotkit_customize_config
+from copilotkit.langgraph import copilotkit_customize_config, copilotkit_emit_state
 from langchain.tools import tool
 from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig
@@ -11,7 +11,13 @@ from langgraph.types import Command
 
 from src.lib.download import get_resource
 from src.lib.model import get_model
-from src.lib.state import AgentState
+from src.lib.state import AgentState, DataQuestion
+from src.lib.tako_mcp import call_tako_explore, format_explore_results
+
+
+# Feature toggles
+ENABLE_EXPLORE_API = False
+ENABLE_DEEP_QUERIES = False
 
 
 @tool
@@ -35,8 +41,22 @@ def DeleteResources(urls: List[str]):  # pylint: disable=invalid-name,unused-arg
 
 
 @tool
-def GenerateDataQuestions(questions: List[str]):  # pylint: disable=invalid-name,unused-argument
-    """Generate 3-5 data-focused questions to search Tako's knowledge base for relevant charts and visualizations."""
+def GenerateDataQuestions(questions: List[DataQuestion]):  # pylint: disable=invalid-name,unused-argument
+    """
+    Generate 3-6 data-focused questions to search Tako's knowledge base.
+
+    Create a diverse set of questions with different complexity levels:
+    - 2-3 basic questions (search_effort='fast') for straightforward data lookups
+    - 1-2 complex questions (search_effort='deep') for in-depth analysis
+    - 0-1 prediction market questions (search_effort='deep') about forecasts, probabilities, or future outcomes
+
+    Example:
+    [
+        {"question": "China GDP since 1960", "search_effort": "fast", "query_type": "basic"},
+        {"question": "Compare year-over-year growth in exports for east asian countries", "search_effort": "deep", "query_type": "complex"},
+        {"question": "What are prediction market odds for China invading Taiwan in 2025?", "search_effort": "deep", "query_type": "prediction_market"}
+    ]
+    """
 
 
 async def chat_node(
@@ -67,13 +87,21 @@ async def chat_node(
         ],
     )
 
+    # Debug: Log message history to diagnose OpenAI error
+    print(f"\n🔍 chat_node: Received {len(state['messages'])} messages:")
+    for i, msg in enumerate(state["messages"][-6:], max(0, len(state['messages'])-5)):
+        msg_type = type(msg).__name__
+        has_tool_calls = hasattr(msg, 'tool_calls') and msg.tool_calls
+        tool_name = msg.tool_calls[0]["name"] if has_tool_calls else "N/A"
+        print(f"  [{i}] {msg_type}{f' (tool_calls: {tool_name})' if has_tool_calls else ''}")
+
     state["resources"] = state.get("resources", [])
     research_question = state.get("research_question", "")
     report = state.get("report", "")
 
     resources = []
     tako_charts_map = {}
-    available_tako_titles = []
+    available_tako_charts = []
 
     for resource in state["resources"]:
         # Tako charts already have descriptions, don't fetch content
@@ -91,9 +119,7 @@ async def chat_node(
             # Build Tako charts map for post-processing
             if title and iframe_html:
                 tako_charts_map[title] = iframe_html
-                # Include description so LLM knows what the chart contains
-                desc_preview = description[:200] + "..." if len(description) > 200 else description
-                available_tako_titles.append(f"  - **{title}**\n    {desc_preview}")
+                available_tako_charts.append(f"  - **{title}**\n    Description: {description}")
         else:
             # Web resources: fetch content
             content = get_resource(resource["url"])
@@ -101,21 +127,34 @@ async def chat_node(
                 continue
             resources.append({**resource, "content": content})
 
-    available_tako_titles_str = "\n".join(available_tako_titles) if available_tako_titles else "  (No Tako charts available yet)"
-
-    # Debug log to help troubleshoot chart embedding
-    if available_tako_titles:
-        print(f"\n📊 {len(available_tako_titles)} Tako charts available for embedding:")
-        for title_line in available_tako_titles[:3]:  # Show first 3
-            print(f"  {title_line.split('**')[1] if '**' in title_line else title_line}")
-    else:
-        print("⚠️  No Tako charts available for embedding in report")
+    available_tako_charts_str = "\n".join(available_tako_charts) if available_tako_charts else "  (No Tako charts available yet)"
 
     model = get_model(state)
     # Prepare the kwargs for the ainvoke method
     ainvoke_kwargs = {}
     if model.__class__.__name__ in ["ChatOpenAI"]:
         ainvoke_kwargs["parallel_tool_calls"] = False
+
+    # Build dynamic prompt based on feature toggles
+    if ENABLE_DEEP_QUERIES:
+        data_questions_instructions = """2. THEN: Use GenerateDataQuestions to create 3-6 data-focused questions with varied complexity:
+               - 2-3 BASIC questions (fast search) for straightforward data: "Country X GDP 2020-2024"
+               - 1-2 COMPLEX questions (deep search) for analytical insights: "What factors drove X's growth?"
+               - 0-1 PREDICTION MARKET question (deep search) if relevant: "What are odds for X in 2025?"
+               - Use the entities, metrics, cohorts, and time periods listed in the knowledge base context above when available
+               - Prefer exact entity/metric names from the knowledge base context for better search results"""
+    else:
+        data_questions_instructions = """2. THEN: Use GenerateDataQuestions to create 2-4 BASIC data-focused questions (fast search only):
+               - Focus on straightforward data lookups: "Country X GDP 2020-2024"
+               - Use the entities, metrics, cohorts, and time periods listed in the knowledge base context above when available
+               - Prefer exact entity/metric names from the knowledge base context for better search results
+               - 0-1 PREDICTION MARKET question if relevant: "What are prediction market odds for X in 2025?"
+               - Note: Deep/complex queries are currently disabled"""
+
+    # Add status update for query analysis
+    state["logs"] = state.get("logs", [])
+    state["logs"].append({"message": "Analyzing your research query...", "done": False})
+    await copilotkit_emit_state(config, state)
 
     response = await model.bind_tools(
         [
@@ -133,9 +172,11 @@ async def chat_node(
             You are a research assistant. You help the user with writing a research report.
             Do not recite the resources, instead use them to answer the user's question.
 
+            {state.get("explore_context", "")}
+
             RESEARCH WORKFLOW:
             1. FIRST: When you receive a user's query, use WriteResearchQuestion to extract/formulate the core research question
-            2. THEN: Use GenerateDataQuestions to create 3-5 data-focused questions for Tako's knowledge base
+            {data_questions_instructions}
             3. These questions will search Tako for relevant charts and visualizations
             4. Use the Search tool for web resources
             5. When writing the report, err on the side of using Tako charts wherever relevant and include [TAKO_CHART:title] markers
@@ -147,21 +188,28 @@ async def chat_node(
             - If a research question is already provided, YOU MUST NOT ASK FOR IT AGAIN
 
             CRITICAL - EMBEDDING TAKO CHARTS IN REPORT:
-            When writing your report, you can embed Tako chart visualizations using markers.
+            When writing your report, you can embed Tako chart visualizations using special markers.
 
             SYNTAX: [TAKO_CHART:exact_title_of_chart]
 
             AVAILABLE TAKO CHARTS:
-{available_tako_titles_str}
+{available_tako_charts_str}
 
             **Remember: The charts above are already fetched and ready to embed. Use them liberally throughout your report!**
 
-            EXAMPLE:
+            IMPORTANT RULES:
+            - DO NOT use markdown image syntax like ![title](url) - this will NOT work
+            - DO NOT use HTML img tags - this will NOT work
+            - ONLY use the [TAKO_CHART:title] marker syntax
+            - DO NOT include external links like tradingeconomics.com
+            - ONLY use charts from the AVAILABLE TAKO CHARTS list above
+
+            EXAMPLE (CORRECT):
             ## Economic Growth Analysis
 
             China's economy has shown significant growth over the past decade...
 
-            [TAKO_CHART:China GDP Growth 2000-2020]
+            [TAKO_CHART:China GDP]
 
             The data visualization above shows the dramatic increase in GDP...
 
@@ -173,8 +221,9 @@ async def chat_node(
             - Position markers where you want the interactive chart to appear
             - Add explanatory text before and after the chart marker to provide context
             - **Try to include ALL available charts** that have any relevance to the research topic
+            - Evaluate the chart description to ensure it provides related data for the point you're making
             - A chart adds value even if it only partially relates to your discussion
-            - More data visualization = better report. When in doubt, include the chart!
+            - Skip charts that are unrelated and don't add meaningful insights
             - The chart will be automatically rendered as an interactive visualization
 
             You should use the search tool to get resources before answering the user's question.
@@ -197,11 +246,25 @@ async def chat_node(
         config,
     )
 
+    # Mark query analysis as complete
+    state["logs"][-1]["done"] = True
+    await copilotkit_emit_state(config, state)
+
     ai_message = cast(AIMessage, response)
 
     if ai_message.tool_calls:
         if ai_message.tool_calls[0]["name"] == "WriteReport":
             report = ai_message.tool_calls[0]["args"].get("report", "")
+
+            # Clean up: Remove any markdown image links that the LLM incorrectly added
+            # Pattern: ![title](url) where url contains tradingeconomics, worldbank, etc.
+            import re
+            external_domains = r'(tradingeconomics|worldbank|imf|fred|ourworldindata|statista)'
+            report = re.sub(rf'!\[([^\]]+)\]\(https?://[^)]*{external_domains}[^)]*\)',
+                          r'', report, flags=re.IGNORECASE)
+
+            # Remove any other markdown images that aren't Tako charts
+            report = re.sub(r'!\[[^\]]*\]\([^)]+\)', '', report)
 
             # Post-process: Replace Tako chart markers with actual iframe HTML
             embedded_charts = []
@@ -245,12 +308,56 @@ async def chat_node(
                 },
             )
         if ai_message.tool_calls[0]["name"] == "WriteResearchQuestion":
+            research_question = ai_message.tool_calls[0]["args"]["research_question"]
+
+            # Call explore API to get knowledge graph context (if enabled)
+            explore_context = ""
+            if ENABLE_EXPLORE_API:
+                print(f"\n{'='*80}")
+                print(f"🔍 EXPLORE API CALL")
+                print(f"Research Question: {research_question}")
+
+                # Add status update for Tako explore
+                state["logs"].append({"message": "Exploring Tako knowledge graph...", "done": False})
+                await copilotkit_emit_state(config, state)
+
+                explore_results = await call_tako_explore(research_question)
+                explore_context = format_explore_results(explore_results)
+
+                # Log explore results
+                if explore_results.get("total_matches", 0) > 0:
+                    print(f"\n📊 EXPLORE RESULTS:")
+                    if explore_results.get("entities"):
+                        print(f"  Entities ({len(explore_results['entities'])}):")
+                        for e in explore_results["entities"][:5]:
+                            print(f"    - {e.get('name', 'N/A')}")
+                    if explore_results.get("metrics"):
+                        print(f"  Metrics ({len(explore_results['metrics'])}):")
+                        for m in explore_results["metrics"][:5]:
+                            print(f"    - {m.get('name', 'N/A')}")
+                    if explore_results.get("cohorts"):
+                        print(f"  Cohorts ({len(explore_results['cohorts'])}):")
+                        for c in explore_results["cohorts"][:3]:
+                            print(f"    - {c.get('name', 'N/A')}")
+                    if explore_results.get("time_periods"):
+                        print(f"  Time Periods ({len(explore_results['time_periods'])}):")
+                        for t in explore_results["time_periods"][:3]:
+                            print(f"    - {t}")
+                else:
+                    print(f"  ⚠️  No explore results found")
+                print(f"{'='*80}\n")
+
+                # Mark explore as complete
+                state["logs"][-1]["done"] = True
+                await copilotkit_emit_state(config, state)
+            else:
+                print(f"⏭️  Explore API disabled (ENABLE_EXPLORE_API=False)")
+
             return Command(
                 goto="chat_node",
                 update={
-                    "research_question": ai_message.tool_calls[0]["args"][
-                        "research_question"
-                    ],
+                    "research_question": research_question,
+                    "explore_context": explore_context,
                     "messages": [
                         ai_message,
                         ToolMessage(
@@ -271,6 +378,25 @@ async def chat_node(
         elif tool_name == "GenerateDataQuestions":
             # Store data questions and route to search
             data_questions = ai_message.tool_calls[0]["args"].get("questions", [])
+
+            # Log generated data questions
+            print(f"\n{'='*80}")
+            print(f"❓ GENERATED DATA QUESTIONS ({len(data_questions)} total)")
+            for i, q in enumerate(data_questions, 1):
+                effort = q.get("search_effort", "unknown")
+                query_type = q.get("query_type", "unknown")
+                question = q.get("question", "N/A")
+                print(f"  {i}. [{effort.upper()}] [{query_type}] {question}")
+            print(f"{'='*80}\n")
+
+            # Add status update for generated questions
+            if data_questions:
+                state["logs"].append({
+                    "message": f"Generated {len(data_questions)} search questions",
+                    "done": True
+                })
+                await copilotkit_emit_state(config, state)
+
             return Command(
                 goto="search_node",
                 update={

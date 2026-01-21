@@ -19,6 +19,14 @@ class Resource(TypedDict):
     iframe_html: NotRequired[str]
     source: NotRequired[str]
 
+class DataQuestion(TypedDict):
+    """
+    Represents a structured data question with search configuration.
+    """
+    question: str
+    search_effort: Literal["fast", "deep"]
+    query_type: Literal["basic", "complex", "prediction_market"]
+
 class Log(TypedDict):
     """
     Represents a log of an action performed by the agent.
@@ -36,4 +44,5 @@ class AgentState(MessagesState):
     report: str
     resources: List[Resource]
     logs: List[Log]
-    data_questions: NotRequired[List[str]]
+    data_questions: NotRequired[List[DataQuestion]]
+    explore_context: NotRequired[str]

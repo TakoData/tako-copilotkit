@@ -8,11 +8,8 @@
     "lint": "next lint",
     "dev": "concurrently -k -n ui,agent -c blue,red \"PORT=3000 npm run dev:ui\" \"PORT=2024 npm run dev:agent\"",
     "dev:ui": "next dev",
-    "dev:agent": "npm run dev:agent:py",
-    "dev:agent:py": "cd agents/python && uv run main.py",
-    "dev:agent:ts": "cd agents/typescript && npm run dev",
-    "install:agent:py": "cd agents/python && uv sync",
-    "install:agent:ts": "cd agents/typescript && npm i --legacy-peer-deps"
+    "dev:agent": "cd agents/python && uv run main.py",
+    "install:agent": "cd agents/python && uv sync"
   },
   "dependencies": {
     "@copilotkit/react-core": "1.50.1",
@@ -26,6 +23,7 @@
     "@radix-ui/react-slot": "^1.1.0",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
+    "html2pdf.js": "^0.14.0",
     "langchain": "^1.2.10",
     "lucide-react": "^0.451.0",
     "next": "15.4.10",

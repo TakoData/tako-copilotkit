@@ -18,7 +18,7 @@ class handler(BaseHTTPRequestHandler):
             effort = request_data.get('effort', 'medium')
 
             # Get environment variables
-            mcp_url = os.environ.get('MCP_SERVER_URL', 'http://localhost:8001')
+            mcp_url = os.environ.get('TAKO_MCP_URL', 'http://localhost:8001')
             api_token = os.environ.get('TAKO_API_TOKEN', '')
 
             # Call MCP server
