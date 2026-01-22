@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import { ChevronDown } from "lucide-react";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
   useCoAgent,
@@ -47,7 +46,7 @@ export function ResearchCanvas() {
 
   useCoAgentStateRender({
     name: agent,
-    render: ({ state, nodeName, status }) => {
+    render: ({ state, status }) => {
       // Show progress if logs exist, or if agent is still running but logs were cleared
       const hasLogs = state.logs && state.logs.length > 0;
       const isRunning = status === "inProgress";

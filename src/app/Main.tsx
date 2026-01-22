@@ -6,7 +6,7 @@ import { CopilotChat } from "@copilotkit/react-ui";
 import { useCopilotChatSuggestions } from "@copilotkit/react-ui";
 import { ChatInputWithModelSelector } from "@/components/ChatInputWithModelSelector";
 import Split from "react-split";
-import { GripVertical } from "lucide-react";
+import React from "react";
 
 export default function Main() {
   const { model, agent } = useModelSelectorContext();
@@ -81,11 +81,11 @@ export default function Main() {
               "--copilot-kit-primary-color": "#FFFFFF",
               "--copilot-kit-contrast-color": "#000000",
               "--copilot-kit-secondary-contrast-color": "#000",
-            } as any}
+            } as React.CSSProperties}
           >
             <CopilotChat
               Input={ChatInputWithModelSelector}
-              onSubmitMessage={async (message) => {
+              onSubmitMessage={async () => {
                 setState({ ...state, logs: [] });
                 await new Promise((resolve) => setTimeout(resolve, 30));
               }}

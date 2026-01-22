@@ -9,11 +9,16 @@ export type Resource = {
   source: string;
 };
 
+export type LogEntry = {
+  message: string;
+  done: boolean;
+};
+
 export type AgentState = {
   model: string;
   research_question: string;
   report: string;
-  resources: any[];
-  logs: any[];
+  resources: Resource[];
+  logs: LogEntry[];
   data_questions?: string[];
 }

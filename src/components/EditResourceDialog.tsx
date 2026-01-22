@@ -56,7 +56,7 @@ export function EditResourceDialog({
             placeholder="Resource Title"
             value={editResource?.title || ""}
             onChange={(e) =>
-              setEditResource((prev: any) =>
+              setEditResource((prev: Resource | null) =>
                 prev ? { ...prev, title: e.target.value } : null
               )
             }
