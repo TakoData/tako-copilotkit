@@ -2,9 +2,16 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Install dependencies
+# Install uv for faster dependency installation
+RUN pip install --no-cache-dir uv
+
+# Copy dependency files
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY pyproject.toml .
+
+# Install dependencies using uv (much faster than pip)
+# Use --system to install globally in the container
+RUN uv pip install --system --no-cache -r requirements.txt
 
 # Copy source code
 COPY . .
