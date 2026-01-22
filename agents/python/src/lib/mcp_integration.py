@@ -83,7 +83,7 @@ class SimpleMCPClient:
                         elif event_type == "message":
                             try:
                                 msg = json.loads(data)
-                                msg_id = msg.get("id")
+                                msg_id = msg.get("pub_id")
                                 if msg_id in self._responses:
                                     self._responses[msg_id].set_result(msg)
                             except Exception as e:
@@ -446,7 +446,7 @@ async def get_visualization_iframe(item_id: str = None, embed_url: str = None) -
   "use strict";
   window.addEventListener("message", function(e) {{
     const d = e.data;
-    if (d.type !== "visualization::resize") return;
+    if (d.type !== "tako::resize") return;
 
     for (let iframe of document.querySelectorAll("iframe")) {{
       if (iframe.contentWindow !== e.source) continue;

@@ -13,6 +13,9 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 
 from src.lib.state import AgentState
 
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 
 def get_model(state: AgentState) -> BaseChatModel:
     """
@@ -22,17 +25,13 @@ def get_model(state: AgentState) -> BaseChatModel:
     state_model = state.get("model", "openai")
     model = os.getenv("MODEL", state_model)
 
-    print(f"Using model: {model}")
-
     if model == "openai":
-        api_key = os.getenv("OPENAI_API_KEY")
-        print(f"DEBUG: OPENAI_API_KEY from environment: {api_key[:10] if api_key else 'NOT SET'}...")
-        print(f"DEBUG: All env vars starting with OPENAI: {[k for k in os.environ.keys() if 'OPENAI' in k]}")
-        if not api_key:
+        if not OPENAI_API_KEY:
             raise ValueError("OPENAI_API_KEY environment variable is not set")
-        return ChatOpenAI(temperature=0, model="gpt-4o-mini", api_key=api_key)
+        return ChatOpenAI(temperature=0, model="gpt-4o-mini", api_key=OPENAI_API_KEY)
     if model == "anthropic":
-
+        if not ANTHROPIC_API_KEY:
+            raise ValueError("ANTHROPIC_API_KEY environment variable is not set")
         return ChatAnthropic(
             temperature=0,
             model_name="claude-3-5-sonnet-20240620",
@@ -40,11 +39,12 @@ def get_model(state: AgentState) -> BaseChatModel:
             stop=None,
         )
     if model == "google_genai":
-
+        if not GOOGLE_API_KEY:
+            raise ValueError("GOOGLE_API_KEY environment variable is not set")
         return ChatGoogleGenerativeAI(
             temperature=0,
             model="gemini-1.5-pro",
-            api_key=cast(Any, os.getenv("GOOGLE_API_KEY")) or None,
+            api_key=GOOGLE_API_KEY,
         )
 
     raise ValueError("Invalid model specified")
