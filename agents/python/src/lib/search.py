@@ -274,17 +274,18 @@ async def search_node(state: AgentState, config: RunnableConfig):
 
     # Tag resources with resource_type and attach content
     for resource in resources:
-        # Check if this resource is from Tako by matching URL or pub_id
+        # Check if this resource is from Tako by matching URL or card_id
         is_tako = False
         for tako_result in tako_results:
             if isinstance(tako_result, dict) and (
                 resource.get("url") == tako_result.get("url") or
-                (tako_result.get("pub_id") and resource.get("title") == tako_result.get("title"))
+                (tako_result.get("id") and resource.get("title") == tako_result.get("title"))
             ):
                 is_tako = True
                 resource["resource_type"] = "tako_chart"
                 resource["source"] = "Tako"
-                resource["pub_id"] = tako_result.get("pub_id")
+                resource["card_id"] = tako_result.get("id")  # Changed from pub_id to card_id
+                resource["embed_url"] = tako_result.get("embed_url")  # Add embed_url
                 # Store truncated description as content (no iframe HTML)
                 resource["content"] = tako_result.get("description", "")
                 break
@@ -300,6 +301,19 @@ async def search_node(state: AgentState, config: RunnableConfig):
                             # Use Tavily's content summary directly
                             resource["content"] = tavily_item.get("content", "")
                             break
+
+    # Generate iframe HTML for Tako charts that don't have it yet
+    for resource in resources:
+        if resource.get("resource_type") == "tako_chart" and not resource.get("iframe_html"):
+            card_id = resource.get("card_id")
+            embed_url = resource.get("embed_url")
+            if card_id or embed_url:
+                iframe_html = await get_visualization_iframe(
+                    item_id=card_id,
+                    embed_url=embed_url
+                )
+                if iframe_html:
+                    resource["iframe_html"] = iframe_html
 
     # Enforce resource limit to prevent context bloat
     current_count = len(state["resources"])

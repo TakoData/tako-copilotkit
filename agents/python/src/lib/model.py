@@ -3,7 +3,6 @@ This module provides a function to get a model based on the configuration.
 """
 
 import os
-from typing import Any, cast
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_openai import ChatOpenAI

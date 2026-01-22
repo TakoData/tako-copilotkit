@@ -1,6 +1,5 @@
 """Chat Node"""
 
-import re
 from typing import List, Literal, cast
 
 from copilotkit.langgraph import copilotkit_customize_config, copilotkit_emit_state
@@ -100,7 +99,7 @@ async def chat_node(
         # Tako charts - use stored description as content
         if resource.get("resource_type") == "tako_chart":
             title = resource.get("title", "")
-            pub_id = resource.get("pub_id")
+            card_id = resource.get("card_id")  # Changed from pub_id
             embed_url = resource.get("embed_url")
             description = resource.get("description", "")
 
@@ -111,9 +110,9 @@ async def chat_node(
             })
 
             # Build Tako charts map for post-processing (generate iframe on demand)
-            if title and (pub_id or embed_url):
-                # Store pub_id/embed_url for later iframe generation
-                tako_charts_map[title] = {"pub_id": pub_id, "embed_url": embed_url}
+            if title and (card_id or embed_url):
+                # Store card_id/embed_url for later iframe generation
+                tako_charts_map[title] = {"card_id": card_id, "embed_url": embed_url}
                 available_tako_charts.append(f"  - **{title}**\n    Description: {description}")
         else:
             # Web resources: use pre-stored Tavily summary (no download needed)
@@ -249,7 +248,6 @@ async def chat_node(
     await copilotkit_emit_state(config, state)
 
     ai_message = cast(AIMessage, response)
-
     if ai_message.tool_calls:
         if ai_message.tool_calls[0]["name"] == "WriteReport":
             report = ai_message.tool_calls[0]["args"].get("report", "")
@@ -273,7 +271,7 @@ async def chat_node(
                     chart_info = tako_charts_map[chart_title]
                     # Generate iframe HTML on demand
                     iframe_html = await get_visualization_iframe(
-                        item_id=chart_info.get("pub_id"),
+                        item_id=chart_info.get("card_id"),
                         embed_url=chart_info.get("embed_url")
                     )
                     if iframe_html:

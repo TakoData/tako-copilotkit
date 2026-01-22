@@ -83,7 +83,7 @@ class SimpleMCPClient:
                         elif event_type == "message":
                             try:
                                 msg = json.loads(data)
-                                msg_id = msg.get("pub_id")
+                                msg_id = msg.get("id")
                                 if msg_id in self._responses:
                                     self._responses[msg_id].set_result(msg)
                             except Exception as e:
@@ -157,7 +157,7 @@ class SimpleMCPClient:
                     if resp.status_code == 410:
                         logger.warning("Session expired (410), needs reconnection")
                         raise SessionExpiredException(
-                            f"Session expired or not found. Reconnection required."
+                            "Session expired or not found. Reconnection required."
                         )
                 except json.JSONDecodeError:
                     error_msg = error_text

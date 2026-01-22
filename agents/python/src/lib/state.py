@@ -15,9 +15,10 @@ class Resource(TypedDict):
     title: str
     description: str
     resource_type: NotRequired[Literal["web", "tako_chart"]]
-    pub_id: NotRequired[str]  # Tako card_id (kept as pub_id for compatibility)
+    card_id: NotRequired[str]  # Tako card identifier for visualizations
     iframe_html: NotRequired[str]
     source: NotRequired[str]
+    embed_url: NotRequired[str]  # Tako embed URL for iframe src
 
 class DataQuestion(TypedDict):
     """
