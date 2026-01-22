@@ -130,6 +130,9 @@ async def chat_node(
 
     available_tako_charts_str = "\n".join(available_tako_charts) if available_tako_charts else "  (No Tako charts available yet)"
 
+    logger.info(f"Built tako_charts_map with {len(tako_charts_map)} charts")
+    logger.info(f"Chart titles: {list(tako_charts_map.keys())}")
+
     model = get_model(state)
     # Prepare the kwargs for the ainvoke method
     ainvoke_kwargs = {}
@@ -193,10 +196,10 @@ async def chat_node(
 
             SYNTAX: [TAKO_CHART:exact_title_of_chart]
 
-            AVAILABLE TAKO CHARTS:
+            AVAILABLE TAKO CHARTS ({len(tako_charts_map)} total):
 {available_tako_charts_str}
 
-            **Remember: The charts above are already fetched and ready to embed. Use them liberally throughout your report!**
+            **Remember: You have {len(tako_charts_map)} charts available above. They are already fetched and ready to embed. Include at least 3-5 charts in your report!**
 
             IMPORTANT RULES:
             - DO NOT use markdown image syntax like ![title](url) - this will NOT work
@@ -214,18 +217,19 @@ async def chat_node(
 
             The data visualization above shows the dramatic increase in GDP...
 
-            RULES FOR EMBEDDING CHARTS:
-            - **CRITICAL**: Err on the side of INCLUDING charts - if a chart is even tangentially relevant, embed it!
-            - Review the chart descriptions above and look for ANY opportunity to embed them
+            RULES FOR EMBEDDING CHARTS (MANDATORY):
+            - **MINIMUM REQUIREMENT**: Include at least 3-5 relevant charts in your report (more if appropriate)
+            - **CRITICAL**: Err on the side of INCLUDING charts - if a chart is relevant, embed it!
             - Use [TAKO_CHART:exact_title] syntax to embed charts
             - The title must EXACTLY match one of the available charts listed above (copy the title from the bold text)
             - Position markers where you want the interactive chart to appear
-            - Add explanatory text before and after the chart marker to provide context
-            - **Try to include ALL available charts** that have any relevance to the research topic
-            - Evaluate the chart description to ensure it provides related data for the point you're making
-            - A chart adds value even if it only partially relates to your discussion
-            - Skip charts that are unrelated and don't add meaningful insights
+            - Add a brief explanatory sentence before and after each chart
+            - Charts are PRIMARY evidence - your report should include multiple charts with supporting text
+            - Distribute charts throughout your report in relevant sections
+            - Only skip a chart if it has no relevance to the research question
             - The chart will be automatically rendered as an interactive visualization
+
+            **IMPORTANT**: Aim to include at least 3-5 charts from the list above to provide strong data-driven evidence!
 
             You should use the search tool to get resources before answering the user's question.
             Use the content and descriptions from both Tako charts and web resources to inform your report.
@@ -270,25 +274,41 @@ async def chat_node(
             embedded_charts = []
             async def replace_chart_marker_async(match):
                 chart_title = match.group(1).strip()
+
+                # Try exact match first
+                chart_info = None
                 if chart_title in tako_charts_map:
-                    embedded_charts.append(chart_title)
                     chart_info = tako_charts_map[chart_title]
-                    # Generate iframe HTML on demand
-                    iframe_html = await get_visualization_iframe(
-                        item_id=chart_info.get("card_id"),
-                        embed_url=chart_info.get("embed_url")
-                    )
-                    if iframe_html:
-                        # Remove script tags - resize listener is handled in React component
-                        iframe_only = re.sub(r'<script.*?</script>', '', iframe_html, flags=re.DOTALL)
-                        return "\n\n" + iframe_only + "\n\n"
-                    else:
-                        return f"\n\n[Chart iframe generation failed: {chart_title}]\n\n"
+                # Try case-insensitive match
+                elif any(title.lower() == chart_title.lower() for title in tako_charts_map.keys()):
+                    # Find the matching title (case-insensitive)
+                    matching_title = next(title for title in tako_charts_map.keys() if title.lower() == chart_title.lower())
+                    chart_info = tako_charts_map[matching_title]
+                    logger.warning(f"Chart title case mismatch: '{chart_title}' matched to '{matching_title}'")
                 else:
+                    logger.error(f"Chart not found: '{chart_title}'. Available: {list(tako_charts_map.keys())}")
                     return f"\n\n[Chart not found: {chart_title}]\n\n"
 
+                embedded_charts.append(chart_title)
+                # Generate iframe HTML on demand
+                iframe_html = await get_visualization_iframe(
+                    item_id=chart_info.get("card_id"),
+                    embed_url=chart_info.get("embed_url")
+                )
+                if iframe_html:
+                    # Remove script tags - resize listener is handled in React component
+                    iframe_only = re.sub(r'<script.*?</script>', '', iframe_html, flags=re.DOTALL)
+                    return "\n\n" + iframe_only + "\n\n"
+                else:
+                    logger.error(f"Failed to generate iframe for: '{chart_title}'")
+                    return f"\n\n[Chart iframe generation failed: {chart_title}]\n\n"
+
             # Find all chart markers and replace them asynchronously
-            chart_markers = re.finditer(r'\[TAKO_CHART:([^\]]+)\]', report)
+            chart_markers = list(re.finditer(r'\[TAKO_CHART:([^\]]+)\]', report))
+            logger.info(f"Found {len(chart_markers)} chart markers in report")
+            for marker in chart_markers:
+                logger.info(f"  Marker: [TAKO_CHART:{marker.group(1)}]")
+
             replacements = []
             for match in chart_markers:
                 replacement = await replace_chart_marker_async(match)
@@ -298,6 +318,8 @@ async def chat_node(
             processed_report = report
             for start, end, replacement in reversed(replacements):
                 processed_report = processed_report[:start] + replacement + processed_report[end:]
+
+            logger.info(f"Report processing complete. Embedded {len([r for r in replacements if '<iframe' in r[2]])} charts")
 
             return Command(
                 goto="chat_node",
