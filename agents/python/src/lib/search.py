@@ -15,7 +15,7 @@ from tavily import TavilyClient
 
 from src.lib.model import get_model
 from src.lib.state import AgentState
-from src.lib.tako_mcp import call_tako_knowledge_search
+from src.lib.mcp_integration import search_knowledge_base
 from src.lib.chat import ENABLE_DEEP_QUERIES
 
 
@@ -123,7 +123,7 @@ async def search_node(state: AgentState, config: RunnableConfig):
     # Run Tavily web search and Tako knowledge search in parallel
     tavily_tasks = [async_tavily_search(query) for query in queries]
     fast_tako_tasks = [
-        call_tako_knowledge_search(q["question"], search_effort="fast")
+        search_knowledge_base(q["question"], search_effort="fast")
         for q in fast_questions
     ]
 
@@ -172,7 +172,7 @@ async def search_node(state: AgentState, config: RunnableConfig):
         log_index = num_tavily + len(fast_questions) + i
         question = q_obj["question"]
         try:
-            result = await call_tako_knowledge_search(question, search_effort="deep")
+            result = await search_knowledge_base(question, search_effort="deep")
             if result:  # Tako returned results
                 # STREAM: Add resources immediately (incremental emission)
                 # This allows frontend to show charts as they arrive

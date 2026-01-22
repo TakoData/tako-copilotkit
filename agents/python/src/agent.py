@@ -1,6 +1,8 @@
 """
-This is the main entry point for the AI.
-It defines the workflow graph and the entry point for the agent.
+Research Agent Workflow
+
+Defines the LangGraph workflow for the research agent, including nodes
+for chat, search, download, and resource management.
 """
 
 import os

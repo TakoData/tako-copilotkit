@@ -1,5 +1,8 @@
 """
-Vercel serverless function for getting chart insights.
+Serverless function for retrieving AI-generated insights via MCP.
+
+This function requests analytical insights about data visualizations
+from an MCP server, providing context and analysis for charts.
 """
 import json
 import os

@@ -1,5 +1,8 @@
 """
-Vercel serverless function for opening chart UI.
+Serverless function for retrieving chart/visualization UI via MCP.
+
+This function requests HTML content for data visualizations from an MCP server,
+enabling embedding of interactive charts in the application.
 """
 import json
 import os

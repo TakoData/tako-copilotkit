@@ -12,7 +12,11 @@ from langgraph.types import Command
 from src.lib.download import get_resource
 from src.lib.model import get_model
 from src.lib.state import AgentState, DataQuestion
-from src.lib.tako_mcp import call_tako_explore, format_explore_results, get_tako_chart_iframe
+from src.lib.mcp_integration import (
+    explore_knowledge_graph,
+    format_knowledge_graph_results,
+    get_visualization_iframe
+)
 
 
 # Feature toggles

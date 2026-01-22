@@ -1,12 +1,14 @@
 """
-Shared MCP client for Vercel serverless functions.
-This is a simplified version that doesn't maintain persistent connections.
+Shared MCP client for serverless functions.
+
+A simplified MCP client implementation that doesn't maintain persistent
+connections, making it suitable for serverless environments.
 """
 import httpx
 
 
 class SimpleMCPClient:
-    """Minimal MCP client for Tako server - stateless for serverless."""
+    """Minimal MCP client - stateless for serverless environments."""
 
     def __init__(self, base_url: str):
         self.base_url = base_url.rstrip("/")
@@ -55,7 +57,7 @@ class SimpleMCPClient:
                 "params": {
                     "protocolVersion": "2024-11-05",
                     "capabilities": {},
-                    "clientInfo": {"name": "tako-vercel", "version": "1.0.0"},
+                    "clientInfo": {"name": "mcp-client", "version": "1.0.0"},
                 },
             }
             resp = await client.post(

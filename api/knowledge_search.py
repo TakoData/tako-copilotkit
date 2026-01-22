@@ -1,5 +1,8 @@
 """
-Vercel serverless function for knowledge search.
+Serverless function for knowledge search via MCP.
+
+This function proxies knowledge search requests to an MCP server,
+allowing data source queries from a serverless environment.
 """
 import json
 import os
@@ -22,7 +25,7 @@ class handler(BaseHTTPRequestHandler):
             mcp_url = os.environ.get('TAKO_MCP_URL', 'http://localhost:8001')
             api_token = os.environ.get('TAKO_API_TOKEN', '')
 
-            # Call MCP server directly via HTTP
+            # Call MCP server via HTTP
             import asyncio
             result = asyncio.run(self._call_mcp(mcp_url, api_token, query, count, search_effort))
 
