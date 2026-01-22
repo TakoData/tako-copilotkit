@@ -1,5 +1,6 @@
 """Chat Node"""
 
+import logging
 from typing import List, Literal, cast
 
 from copilotkit.langgraph import copilotkit_customize_config, copilotkit_emit_state
@@ -14,6 +15,8 @@ from src.lib.state import AgentState, DataQuestion
 from src.lib.mcp_integration import (
     get_visualization_iframe
 )
+
+logger = logging.getLogger(__name__)
 
 
 # Feature toggles
@@ -65,6 +68,7 @@ async def chat_node(
     """
     Chat Node
     """
+    logger.info("=== CHAT_NODE: Starting execution ===")
 
     config = copilotkit_customize_config(
         config,
@@ -344,6 +348,7 @@ async def chat_node(
                 })
                 await copilotkit_emit_state(config, state)
 
+            logger.info(f"GenerateDataQuestions: Routing to search_node with {len(data_questions)} questions")
             return Command(
                 goto="search_node",
                 update={
@@ -358,4 +363,5 @@ async def chat_node(
                 },
             )
 
+    logger.info(f"=== CHAT_NODE: Routing to {goto} ===")
     return Command(goto=goto, update={"messages": response})
