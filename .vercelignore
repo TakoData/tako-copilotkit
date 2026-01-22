@@ -1,0 +1,13 @@
+# Python agent (deployed separately to Railway)
+agents/
+
+# Development files
+.env.local
+.env*.local
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
