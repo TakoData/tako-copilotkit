@@ -18,8 +18,9 @@ import httpx
 logger = logging.getLogger(__name__)
 
 # Configuration from environment variables
-DATA_SOURCE_URL = os.getenv("TAKO_URL", "http://localhost:8000").rstrip("/")
-MCP_SERVER_URL = os.getenv("TAKO_MCP_URL", "http://localhost:8001").rstrip("/")
+DATA_SOURCE_URL = os.getenv("TAKO_URL", "https://tako.com").rstrip("/")
+MCP_SERVER_URL = os.getenv("TAKO_MCP_URL", "https://mcp.tako.com").rstrip("/")
+TAKO_API_TOKEN = os.getenv("TAKO_API_TOKEN", "")
 
 
 class SessionExpiredException(Exception):
@@ -283,11 +284,10 @@ async def search_knowledge_base(
     Returns:
         List of search results with metadata
     """
-    api_token = os.getenv("TAKO_API_TOKEN", "")
 
     result = await _call_mcp_tool("knowledge_search", {
         "query": query,
-        "api_token": api_token,
+        "api_token": TAKO_API_TOKEN,
         "count": count,
         "search_effort": search_effort,
         "country_code": "US",
@@ -338,11 +338,10 @@ async def explore_knowledge_graph(
     Returns:
         Dict with discovered entities, metrics, cohorts, and time periods
     """
-    api_token = os.getenv("TAKO_API_TOKEN", "")
 
     result = await _call_mcp_tool("explore_knowledge_graph", {
         "query": query,
-        "api_token": api_token,
+        "api_token": TAKO_API_TOKEN,
         "node_types": node_types,
         "limit": limit
     })

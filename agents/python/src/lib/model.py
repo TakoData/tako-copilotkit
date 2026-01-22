@@ -6,6 +6,10 @@ import os
 from typing import Any, cast
 
 from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_openai import ChatOpenAI
+from langchain_anthropic import ChatAnthropic
+from langchain_google_genai import ChatGoogleGenerativeAI
+
 
 from src.lib.state import AgentState
 
@@ -21,8 +25,6 @@ def get_model(state: AgentState) -> BaseChatModel:
     print(f"Using model: {model}")
 
     if model == "openai":
-        from langchain_openai import ChatOpenAI
-
         api_key = os.getenv("OPENAI_API_KEY")
         print(f"DEBUG: OPENAI_API_KEY from environment: {api_key[:10] if api_key else 'NOT SET'}...")
         print(f"DEBUG: All env vars starting with OPENAI: {[k for k in os.environ.keys() if 'OPENAI' in k]}")
@@ -30,7 +32,6 @@ def get_model(state: AgentState) -> BaseChatModel:
             raise ValueError("OPENAI_API_KEY environment variable is not set")
         return ChatOpenAI(temperature=0, model="gpt-4o-mini", api_key=api_key)
     if model == "anthropic":
-        from langchain_anthropic import ChatAnthropic
 
         return ChatAnthropic(
             temperature=0,
@@ -39,7 +40,6 @@ def get_model(state: AgentState) -> BaseChatModel:
             stop=None,
         )
     if model == "google_genai":
-        from langchain_google_genai import ChatGoogleGenerativeAI
 
         return ChatGoogleGenerativeAI(
             temperature=0,
