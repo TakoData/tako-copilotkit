@@ -144,7 +144,34 @@ If you encounter rate limits:
 1. Always use `.env.local` for sensitive values
 2. Add `.env.local` to `.gitignore` (already configured)
 3. Rotate API keys regularly
-4. Use environment-specific keys for dev/staging/production
+4. Use environment-specific keys for dev/production
+
+## 🚢 Deployment
+
+This project uses a simple two-branch strategy for safe deployments.
+
+### Branch Strategy
+
+- **`main`** - Development branch (CI runs, no auto-deploy)
+- **`production`** - Auto-deploys to production (protected branch)
+
+### Quick Deploy
+
+```bash
+# Develop and test on main
+git push origin main
+
+# Deploy to production when ready
+git checkout production
+git merge main
+git push origin production
+```
+
+See [DEPLOYMENT.md](./DEPLOYMENT.md) for detailed deployment instructions, including:
+- Setting up Vercel and Railway
+- Configuring GitHub Actions secrets
+- Branch protection rules
+- Rollback procedures
 
 ## 🤝 Contributing
 
