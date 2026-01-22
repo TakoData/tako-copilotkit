@@ -1,266 +1,154 @@
-# Tako MCP Chat - Vercel Deployment
+# Research Canvas with MCP Integration
 
-A conversational interface for searching and exploring Tako charts using the Model Context Protocol (MCP). This demo showcases Tako's MCP UI integration with a clean, deployable architecture.
+An AI-powered research assistant that combines data visualization with web search capabilities. Built with [CopilotKit](https://copilotkit.ai), [LangGraph](https://langchain-ai.github.io/langgraph/), and the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/).
 
-## 🚀 Quick Deploy to Vercel
+This demo showcases how to integrate custom data sources via MCP with a conversational AI interface for research and exploration.
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/yourusername/tako-mcp-chat)
+## ✨ Features
 
-### Prerequisites
+- **AI Research Agent**: Automatically generates relevant search queries and gathers resources
+- **Dual Search**: Combines structured data (via MCP) with web search (via Tavily)
+- **Interactive Resources**: Preview and explore data visualizations inline
+- **Report Generation**: Compile findings into formatted research reports
+- **Real-time Collaboration**: Built with CopilotKit for seamless AI-human interaction
 
-1. **Tako API Token** - Get from [tako.com](https://tako.com)
-2. **MCP Server URL** - Deploy the MCP server separately (see below)
-
-### One-Click Deployment
-
-1. Click the "Deploy with Vercel" button above
-2. Set environment variables:
-   - `TAKO_API_TOKEN` - Your Tako API token
-   - `MCP_SERVER_URL` - Your deployed MCP server URL
-3. Deploy!
-
-## 📋 Manual Deployment
-
-### Step 1: Get MCP Server URL
-
-You need an MCP server URL. Options:
-
-1. **Use Tako's public MCP server** (if available)
-   - Contact Tako for the public MCP server URL
-   - Or use: `https://mcp.tako.com` (example)
-
-2. **Deploy your own MCP server**
-   - Get the Tako MCP server code separately
-   - Deploy to Railway, Render, or Fly.io
-   - See Tako's MCP server repository for deployment instructions
-
-### Step 2: Deploy to Vercel
-
-```bash
-# Install Vercel CLI
-npm install -g vercel
-
-# Clone and setup
-git clone <your-repo>
-cd tako-mcp-chat
-
-# Deploy
-vercel
-
-# Set environment variables
-vercel env add TAKO_API_TOKEN
-vercel env add MCP_SERVER_URL
-
-# Deploy to production
-vercel --prod
-```
-
-## 🏗️ Project Structure
-
-```
-tako-mcp-chat/
-├── frontend/              # React frontend
-│   ├── src/
-│   │   ├── components/
-│   │   │   └── SimpleTakoChat.tsx
-│   │   ├── main.tsx
-│   │   └── index.css
-│   ├── package.json
-│   └── vite.config.ts
-├── api/                   # Vercel serverless functions
-│   ├── mcp_client.py      # Shared MCP client
-│   ├── knowledge_search.py
-│   ├── open_chart_ui.py
-│   ├── get_card_insights.py
-│   └── requirements.txt
-├── backend/               # Local development backend (optional)
-│   └── mcp_proxy.py       # For local testing only
-├── vercel.json            # Vercel configuration
-└── README.md              # This file
-```
-
-**Note**: This demo connects to a remote Tako MCP server. You'll need to set `MCP_SERVER_URL` to point to Tako's public MCP server or your own deployed instance.
-
-## 🔧 Local Development
+## 🚀 Quick Start
 
 ### Prerequisites
 
-- Node.js 18+
-- Python 3.9+
-- Tako API token
+1. **OpenAI API Key** - Get from [platform.openai.com](https://platform.openai.com)
+2. **Tavily API Key** - Get from [tavily.com](https://tavily.com)
+3. **Data Source** - Configure your MCP server endpoint (optional)
 
-### Setup
+## 📋 Installation
 
 ```bash
 # Clone the repository
 git clone <your-repo>
-cd tako-mcp-chat
+cd research-canvas
 
-# Install frontend dependencies
-cd frontend
+# Install dependencies
 npm install
 
-# Install API dependencies
-cd ../api
-pip install -r requirements.txt
+# Copy environment template
+cp .env.example .env.local
 
-# Install MCP server dependencies
-cd ../mcp_server
-pip install -r requirements.txt
-```
+# Add your API keys to .env.local
+# OPENAI_API_KEY=your-openai-key
+# TAVILY_API_KEY=your-tavily-key
 
-### Running Locally
-
-**Option A: Connect to Remote MCP Server (Recommended)**
-```bash
-# Set environment variables
-export TAKO_API_TOKEN="your-api-token"
-export MCP_SERVER_URL="https://mcp.tako.com"  # or your deployed MCP server
-
-# Run Vercel dev server
-vercel dev
-# Runs on http://localhost:3000
-```
-
-**Option B: Use Local Backend Proxy (for testing)**
-```bash
-# Terminal 1 - Run local proxy
-cd backend
-TAKO_API_TOKEN="your-api-token" \
-MCP_SERVER_URL="https://mcp.tako.com" \
-python mcp_proxy.py
-
-# Terminal 2 - Run frontend
-cd frontend
+# Start the development server
 npm run dev
-# Runs on http://localhost:3000
+```
+
+The application will be available at:
+- **Frontend**: http://localhost:3000
+- **Agent Backend**: http://localhost:2024
+
+## 🏗️ Project Structure
+
+```
+research-canvas/
+├── src/                   # Next.js frontend
+│   ├── app/              # App router pages
+│   ├── components/       # React components
+│   └── lib/              # Utilities and types
+├── agents/               # LangGraph agent backends
+│   ├── typescript/       # TypeScript agent (primary)
+│   └── python/          # Python agent (alternative)
+├── api/                  # API routes and MCP integration
+└── .env.example         # Environment variable template
 ```
 
 ## 🌐 Environment Variables
 
-### Required
+Create a `.env.local` file based on `.env.example`:
 
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `TAKO_API_TOKEN` | Your Tako API token | `abc123...` |
-| `MCP_SERVER_URL` | URL of deployed MCP server | `https://mcp.example.com` |
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `OPENAI_API_KEY` | OpenAI API key for LLM | Yes |
+| `TAVILY_API_KEY` | Tavily API key for web search | Yes |
+| `TAKO_API_TOKEN` | API token for data source | Optional* |
+| `TAKO_MCP_URL` | MCP server endpoint URL | Optional* |
+| `TAKO_URL` | Base URL for data source | Optional* |
 
-### For Production
-
-The MCP server should be configured separately (contact Tako or deploy your own instance).
+*Optional fields are only needed if you're connecting to a custom MCP data source.
 
 ## 💬 Usage
 
-Once deployed, the chat interface supports these commands:
-
-### Search
-```
-Search for Intel vs Nvidia
-Find climate change data
-Show me unemployment rates
-```
-
-### Open Charts
-```
-Open chart 1
-Open the first chart
-```
-
-### Get Insights
-```
-Get insights for chart 1
-```
+1. **Start a Research Session**: Enter a research question or topic
+2. **AI Generates Queries**: The agent automatically creates data-focused search queries
+3. **Resource Discovery**: View discovered resources (data visualizations, web articles)
+4. **Explore Resources**: Click on resources to preview and analyze
+5. **Generate Report**: Compile your findings into a formatted report
 
 ## 🏗️ Architecture
 
 ```
 ┌─────────────────┐
-│  Vercel Frontend│
-│   (React + Vite)│
+│  Next.js App    │
+│  (Frontend UI)  │
 └────────┬────────┘
          │
-         │ /api/mcp/* requests
+         │ CopilotKit
          ▼
 ┌─────────────────┐
-│Vercel Serverless│
-│   Functions     │
-│  (Python API)   │
+│  LangGraph      │
+│  Agent          │
 └────────┬────────┘
          │
-         │ HTTP requests
-         ▼
-┌─────────────────┐
-│   MCP Server    │
-│  (Separate host)│
-└────────┬────────┘
+         ├─→ OpenAI (LLM)
          │
-         │ REST API
-         ▼
-┌─────────────────┐
-│  Tako Backend   │
-└─────────────────┘
+         ├─→ Tavily (Web Search)
+         │
+         └─→ MCP Server (Optional Data Source)
 ```
 
-## 📝 API Endpoints
+## 🔧 Key Technologies
 
-The Vercel serverless functions provide these endpoints:
-
-- `POST /api/mcp/knowledge_search` - Search Tako charts
-- `POST /api/mcp/open_chart_ui` - Get chart UI HTML
-- `POST /api/mcp/get_card_insights` - Get AI insights
+- **[CopilotKit](https://copilotkit.ai)**: AI copilot framework for React applications
+- **[LangGraph](https://langchain-ai.github.io/langgraph/)**: Framework for building stateful agent workflows
+- **[Model Context Protocol (MCP)](https://modelcontextprotocol.io/)**: Standard for connecting AI systems to data sources
+- **[Next.js](https://nextjs.org)**: React framework for the frontend
+- **[Tavily](https://tavily.com)**: Web search API for research
 
 ## 🐛 Troubleshooting
 
-### Frontend shows "500 Internal Server Error"
+### Agent won't start
 
-**Issue**: Serverless function can't connect to MCP server
+```bash
+# Reinstall dependencies
+npm install
 
-**Solution**:
-- Verify `MCP_SERVER_URL` is set correctly
-- Check MCP server is running and accessible
-- Check MCP server logs
+# Try running with legacy peer deps
+npm install --legacy-peer-deps
+```
 
-### Charts don't load properly
+### API rate limits
 
-**Issue**: MCP server `PUBLIC_BASE_URL` misconfigured
+If you encounter rate limits:
+- Check your OpenAI API quota
+- Verify Tavily API subscription level
+- Consider adding caching to reduce API calls
 
-**Solution**:
-- Set `PUBLIC_BASE_URL` in MCP server environment
-- Should be publicly accessible URL (e.g., `https://tako.com`)
+### Resources not loading
 
-### "Failed to connect to MCP server"
-
-**Issue**: MCP server not responding
-
-**Solution**:
-- Check MCP server is deployed and running
-- Verify URL in `MCP_SERVER_URL` environment variable
-- Check firewall/CORS settings
+- Verify all API keys are set in `.env.local`
+- Check browser console for errors
+- Ensure agent backend is running on port 2024
 
 ## 🔐 Security
 
-### For Production:
+**Important**: Never commit API keys to version control
 
-1. **Environment Variables**: Never commit tokens to git
-2. **CORS**: Configure allowed origins in MCP server
-3. **Rate Limiting**: Add rate limiting to API endpoints
-4. **API Token**: Rotate Tako API token regularly
-5. **HTTPS**: Always use HTTPS in production
-
-## 📦 Deployment Checklist
-
-- [ ] Deploy MCP server to Railway/Render/Fly.io
-- [ ] Get MCP server public URL
-- [ ] Get Tako API token
-- [ ] Set Vercel environment variables
-- [ ] Deploy to Vercel
-- [ ] Test search functionality
-- [ ] Test chart loading
-- [ ] Verify insights work
+1. Always use `.env.local` for sensitive values
+2. Add `.env.local` to `.gitignore` (already configured)
+3. Rotate API keys regularly
+4. Use environment-specific keys for dev/staging/production
 
 ## 🤝 Contributing
 
-Contributions welcome! Please:
+Contributions are welcome! This project demonstrates how to build AI-powered research tools with CopilotKit and MCP.
 
 1. Fork the repository
 2. Create a feature branch
@@ -268,37 +156,41 @@ Contributions welcome! Please:
 4. Test thoroughly
 5. Submit a pull request
 
+## 🔗 Resources
+
+- [CopilotKit Documentation](https://docs.copilotkit.ai/)
+- [LangGraph Documentation](https://langchain-ai.github.io/langgraph/)
+- [Model Context Protocol](https://modelcontextprotocol.io/)
+- [Next.js Documentation](https://nextjs.org/docs)
+
+## 💡 Extending This Project
+
+### Adding Custom MCP Data Sources
+
+This project includes an example MCP integration. To add your own:
+
+1. Implement MCP server for your data source
+2. Update environment variables with your MCP endpoint
+3. Modify agent tools to call your MCP methods
+4. Update UI components to display your data types
+
+### Customizing the Agent
+
+The LangGraph agent is in `agents/typescript/src/`. Key files:
+- `agent.ts` - Agent routing logic
+- `chat.ts` - Chat and tool definitions
+- `search.ts` - Search node implementation
+
+### UI Customization
+
+The Next.js frontend is in `src/`. Key components:
+- `components/ResearchCanvas.tsx` - Main research interface
+- `components/Resources.tsx` - Resource display and management
+
 ## 📄 License
 
-See Tako's main repository for license information.
-
-## 🔗 Links
-
-- [Tako Website](https://tako.com)
-- [Tako API Docs](https://tako.com/docs)
-- [MCP Protocol](https://modelcontextprotocol.io/)
-- [Vercel Documentation](https://vercel.com/docs)
-
-## 💡 Tips
-
-### Optimizing Costs
-
-- Use "fast" search_effort for quicker, cheaper searches
-- Cache MCP responses where appropriate
-- Set reasonable timeout values
-
-### Improving Performance
-
-- Deploy MCP server geographically close to Tako backend
-- Use CDN for static assets
-- Minimize serverless function cold starts
-
-### Customization
-
-- Edit `SimpleTakoChat.tsx` for UI changes
-- Modify command parsing for different interactions
-- Add new serverless functions for additional MCP tools
+MIT License - See LICENSE file for details
 
 ---
 
-**Built with ❤️ to demonstrate Tako's MCP capabilities**
+**Built as a demonstration of CopilotKit + LangGraph + MCP integration**
