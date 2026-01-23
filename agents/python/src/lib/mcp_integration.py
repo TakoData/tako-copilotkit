@@ -436,9 +436,11 @@ async def get_visualization_iframe(item_id: str = None, embed_url: str = None) -
         logger.info("Using embed_url fallback for visualization")
         return f'''<iframe
   width="100%"
+  height="600"
   src="{embed_url}"
   scrolling="no"
   frameborder="0"
+  style="display: block; border: none;"
 ></iframe>
 
 <script type="text/javascript">
@@ -450,7 +452,7 @@ async def get_visualization_iframe(item_id: str = None, embed_url: str = None) -
 
     for (let iframe of document.querySelectorAll("iframe")) {{
       if (iframe.contentWindow !== e.source) continue;
-      iframe.style.height = (d.height + 4) + "px";
+      iframe.style.height = d.height + "px";
     }}
   }});
 }}();
