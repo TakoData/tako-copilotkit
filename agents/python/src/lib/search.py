@@ -171,8 +171,10 @@ async def search_node(state: AgentState, config: RunnableConfig):
                     # STREAM: Add resources immediately (incremental emission)
                     # This allows frontend to show charts as they arrive
                     existing_urls = {r.get("url") for r in state["resources"]}
+                    existing_titles = {r.get("title", "").lower() for r in state["resources"] if r.get("resource_type") == "tako_chart"}
                     for chart in result:
-                        if chart.get("url") not in existing_urls:
+                        chart_title_lower = chart.get("title", "").lower()
+                        if chart.get("url") not in existing_urls and chart_title_lower not in existing_titles:
                             # Generate iframe HTML for preview modal
                             iframe_html = await get_visualization_iframe(
                                 item_id=chart.get("id"),
@@ -191,6 +193,7 @@ async def search_node(state: AgentState, config: RunnableConfig):
                                 "iframe_html": iframe_html,  # Include iframe HTML for preview
                             })
                             existing_urls.add(chart["url"])
+                            existing_titles.add(chart_title_lower)
 
                     tako_results.extend(result)
 
@@ -204,6 +207,7 @@ async def search_node(state: AgentState, config: RunnableConfig):
         # Deduplicate Tako charts by title (same chart may appear in multiple searches)
         seen_titles = {}
         deduped_tako = []
+        duplicates_removed = 0
         for chart in tako_results:
             if isinstance(chart, dict):
                 title = chart.get("title", "")
@@ -212,7 +216,11 @@ async def search_node(state: AgentState, config: RunnableConfig):
                     deduped_tako.append(chart)
                 elif not title:  # Keep charts without titles
                     deduped_tako.append(chart)
+                elif title:
+                    duplicates_removed += 1
         tako_results = deduped_tako
+        if duplicates_removed > 0:
+            logger.info(f"Removed {duplicates_removed} duplicate Tako charts by title")
 
         config = copilotkit_customize_config(
             config,
@@ -328,8 +336,28 @@ async def search_node(state: AgentState, config: RunnableConfig):
         current_count = len(state["resources"])
         remaining_slots = MAX_TOTAL_RESOURCES - current_count
 
+        # Deduplicate by both URL and title (for Tako charts)
+        existing_urls = {r.get("url") for r in state["resources"]}
+        existing_titles = {r.get("title", "").lower() for r in state["resources"] if r.get("resource_type") == "tako_chart"}
+
+        unique_resources = []
+        for r in resources:
+            r_title_lower = r.get("title", "").lower()
+            is_tako = r.get("resource_type") == "tako_chart"
+
+            # For Tako charts, check both URL and title; for web resources, just URL
+            if is_tako:
+                if r.get("url") not in existing_urls and r_title_lower not in existing_titles:
+                    unique_resources.append(r)
+                    existing_urls.add(r.get("url"))
+                    existing_titles.add(r_title_lower)
+            else:
+                if r.get("url") not in existing_urls:
+                    unique_resources.append(r)
+                    existing_urls.add(r.get("url"))
+
         if remaining_slots > 0:
-            resources_to_add = resources[:remaining_slots]
+            resources_to_add = unique_resources[:remaining_slots]
             state["resources"].extend(resources_to_add)
         else:
             resources_to_add = []

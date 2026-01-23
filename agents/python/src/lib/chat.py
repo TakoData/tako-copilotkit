@@ -298,7 +298,8 @@ async def chat_node(
                 if iframe_html:
                     # Remove script tags - resize listener is handled in React component
                     iframe_only = re.sub(r'<script.*?</script>', '', iframe_html, flags=re.DOTALL)
-                    return "\n\n" + iframe_only + "\n\n"
+                    # Strip any extra whitespace and return with minimal spacing
+                    return "\n" + iframe_only.strip() + "\n"
                 else:
                     logger.error(f"Failed to generate iframe for: '{chart_title}'")
                     return f"\n\n[Chart iframe generation failed: {chart_title}]\n\n"
