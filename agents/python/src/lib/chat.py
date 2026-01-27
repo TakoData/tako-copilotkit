@@ -287,7 +287,8 @@ async def chat_node(
                     logger.warning(f"Chart title case mismatch: '{chart_title}' matched to '{matching_title}'")
                 else:
                     logger.error(f"Chart not found: '{chart_title}'. Available: {list(tako_charts_map.keys())}")
-                    return f"\n\n[Chart not found: {chart_title}]\n\n"
+                    # Don't inject anything if chart not found - just remove the marker
+                    return ""
 
                 embedded_charts.append(chart_title)
                 # Generate iframe HTML on demand
@@ -295,14 +296,16 @@ async def chat_node(
                     item_id=chart_info.get("card_id"),
                     embed_url=chart_info.get("embed_url")
                 )
+
                 if iframe_html:
                     # Remove script tags - resize listener is handled in React component
                     iframe_only = re.sub(r'<script.*?</script>', '', iframe_html, flags=re.DOTALL)
                     # Strip any extra whitespace and return with minimal spacing
                     return "\n" + iframe_only.strip() + "\n"
                 else:
-                    logger.error(f"Failed to generate iframe for: '{chart_title}'")
-                    return f"\n\n[Chart iframe generation failed: {chart_title}]\n\n"
+                    logger.error(f"Failed to generate iframe for: '{chart_title}' - get_visualization_iframe returned None/empty")
+                    # Don't inject error message - just remove the marker
+                    return ""
 
             # Find all chart markers and replace them asynchronously
             chart_markers = list(re.finditer(r'\[TAKO_CHART:([^\]]+)\]', report))
