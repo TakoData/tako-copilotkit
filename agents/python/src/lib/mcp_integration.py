@@ -397,16 +397,20 @@ async def get_visualization_iframe(item_id: str = None, embed_url: str = None) -
     """
     if item_id:
         try:
-            client = await _get_mcp_client()
-            result = await client.call_tool("open_chart_ui", {
+            # Use _call_mcp_tool to get automatic session reconnection
+            result = await _call_mcp_tool("open_chart_ui", {
                 "pub_id": item_id,
                 "dark_mode": True,
                 "width": 900,
                 "height": 600
             })
 
-            # Extract content from MCP response
-            content = result.get("result", {}).get("content", [])
+            if not result:
+                logger.warning(f"No result from MCP for item: {item_id}")
+                return None
+
+            # Handle both direct result and nested result format
+            content = result.get("content", []) if "content" in result else result.get("result", {}).get("content", [])
             if not content:
                 return None
 
