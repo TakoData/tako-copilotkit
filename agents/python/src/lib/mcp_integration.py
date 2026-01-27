@@ -410,12 +410,19 @@ async def get_visualization_iframe(item_id: str = None, embed_url: str = None) -
                 return None
 
             # Handle both direct result and nested result format
-            content = result.get("content", []) if "content" in result else result.get("result", {}).get("content", [])
-            if not content:
-                return None
+            # Check if result is already a resource item (returned directly by _call_mcp_tool)
+            if isinstance(result, dict) and result.get("type") == "resource":
+                resource_item = result
+            else:
+                # Try to extract from content array
+                content = result.get("content", []) if "content" in result else result.get("result", {}).get("content", [])
+                if content and isinstance(content, list):
+                    resource_item = next((c for c in content if c.get("type") == "resource"), None)
+                else:
+                    resource_item = None
 
-            resource_item = next((c for c in content if c.get("type") == "resource"), None)
             if not resource_item:
+                logger.warning(f"No resource item found for item: {item_id}")
                 return None
 
             resource = resource_item.get("resource", {})
@@ -426,7 +433,6 @@ async def get_visualization_iframe(item_id: str = None, embed_url: str = None) -
             )
 
             if html_content and html_content.strip():
-                logger.info(f"Retrieved visualization HTML from MCP ({len(html_content)} chars)")
                 return html_content
 
             logger.warning(f"No HTML content found for item: {item_id}")
@@ -437,7 +443,6 @@ async def get_visualization_iframe(item_id: str = None, embed_url: str = None) -
 
     # Fallback: Generate iframe HTML with embed_url
     if embed_url:
-        logger.info("Using embed_url fallback for visualization")
         return f'''<iframe
   width="100%"
   height="600"
