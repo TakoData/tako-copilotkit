@@ -387,6 +387,7 @@ The labor market showed improvement...
                 goto="chat_node",
                 update={
                     "research_question": research_question,
+                    "resources": state.get("resources", []),  # Preserve resources
                     "messages": [
                         ai_message,
                         ToolMessage(
@@ -421,6 +422,7 @@ The labor market showed improvement...
                 goto="search_node",
                 update={
                     "data_questions": data_questions,
+                    "resources": state.get("resources", []),  # Preserve resources
                     "messages": [
                         ai_message,
                         ToolMessage(
@@ -432,4 +434,4 @@ The labor market showed improvement...
             )
 
     logger.info(f"=== CHAT_NODE: Routing to {goto} ===")
-    return Command(goto=goto, update={"messages": response})
+    return Command(goto=goto, update={"messages": response, "resources": state.get("resources", [])})
