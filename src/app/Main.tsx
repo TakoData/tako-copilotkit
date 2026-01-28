@@ -3,10 +3,36 @@ import { useModelSelectorContext } from "@/lib/model-selector-provider";
 import { AgentState } from "@/lib/types";
 import { useCoAgent } from "@copilotkit/react-core";
 import { CopilotChat } from "@copilotkit/react-ui";
-import { useCopilotChatSuggestions } from "@copilotkit/react-ui";
 import { ChatInputWithModelSelector } from "@/components/ChatInputWithModelSelector";
 import Split from "react-split";
 import React from "react";
+
+const CHAT_SUGGESTIONS = [
+  {
+    title: "Vietnam's Economy",
+    message: "Tell me about Vietnam's economy",
+  },
+  {
+    title: "Nvidia vs Intel",
+    message: "Compare the performance of Nvidia and Intel over the last 10 years",
+  },
+  {
+    title: "Commodities Prices",
+    message: "How have commodities prices moved since the Global Financial Crisis?",
+  },
+  {
+    title: "Global Military Spending",
+    message: "What is the trend of global military spending since the Ukraine war started?",
+  },
+  {
+    title: "Performance of AI companies",
+    message: "How has the performance of AI company's stock prices and funding evolved since 2020 (also include traffic trends)?",
+  },
+  {
+    title: "Rent & Inflation",
+    message: "How has the rent, inflation, and average wages trended in top US cities?",
+  }
+];
 
 export default function Main() {
   const { model, agent } = useModelSelectorContext();
@@ -19,10 +45,6 @@ export default function Main() {
       report: "",
       logs: [],
     },
-  });
-
-  useCopilotChatSuggestions({
-    instructions: "Lifespan of penguins",
   });
 
   return (
@@ -74,7 +96,10 @@ export default function Main() {
           <div
             style={{
               height: "100%",
+              maxHeight: "100%",
               overflow: "hidden",
+              display: "flex",
+              flexDirection: "column",
               "--copilot-kit-background-color": "#E0E9FD",
               "--copilot-kit-secondary-color": "#6766FC",
               "--copilot-kit-separator-color": "#b8b8b8",
@@ -89,6 +114,7 @@ export default function Main() {
                 setState({ ...state, logs: [] });
                 await new Promise((resolve) => setTimeout(resolve, 30));
               }}
+              suggestions={CHAT_SUGGESTIONS}
               labels={{
                 initial: "Hi! How can I assist you with your research today?",
               }}

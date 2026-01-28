@@ -48,15 +48,20 @@ def GenerateDataQuestions(questions: List[DataQuestion]):  # pylint: disable=inv
     """
     Generate 3-6 data-focused questions to search Tako's knowledge base.
 
-    Create a diverse set of questions with different complexity levels:
-    - 2-3 basic questions (search_effort='fast') for straightforward data lookups
-    - 1-2 complex questions (search_effort='deep') for in-depth analysis
+    Create a diverse set of questions:
+    - 2-4 basic questions (search_effort='fast') for straightforward data lookups AND superlative/ranking queries
     - 0-1 prediction market questions (search_effort='deep') about forecasts, probabilities, or future outcomes
+
+    IMPORTANT - Include superlative/ranking queries (use fast search):
+    - "Which countries have the highest GDP per capita?"
+    - "Which cities have the highest rent?"
+    - "What are the top 10 companies by market cap?"
 
     Example:
     [
         {"question": "China GDP since 1960", "search_effort": "fast", "query_type": "basic"},
-        {"question": "Compare year-over-year growth in exports for east asian countries", "search_effort": "deep", "query_type": "complex"},
+        {"question": "Which countries have the highest inflation rates in 2024?", "search_effort": "fast", "query_type": "basic"},
+        {"question": "Compare exports for east asian countries", "search_effort": "fast", "query_type": "basic"},
         {"question": "What are prediction market odds for China invading Taiwan in 2025?", "search_effort": "deep", "query_type": "prediction_market"}
     ]
     """
@@ -143,17 +148,20 @@ async def chat_node(
     if ENABLE_DEEP_QUERIES:
         data_questions_instructions = """2. THEN: Use GenerateDataQuestions to create 3-6 data-focused questions with varied complexity:
                - 2-3 BASIC questions (fast search) for straightforward data: "Country X GDP 2020-2024"
-               - 1-2 COMPLEX questions (deep search) for analytical insights: "What factors drove X's growth?"
-               - 0-1 PREDICTION MARKET question (deep search) if relevant: "What are odds for X in 2025?"
+               - 1-2 COMPLEX questions (deep search) for analytical insights
+               - 0-1 PREDICTION MARKET question (deep search) if relevant: "What are prediction market odds for X in 2025?"
                - Use the entities, metrics, cohorts, and time periods listed in the knowledge base context above when available
                - Prefer exact entity/metric names from the knowledge base context for better search results"""
     else:
-        data_questions_instructions = """2. THEN: Use GenerateDataQuestions to create 2-4 BASIC data-focused questions (fast search only):
-               - Focus on straightforward data lookups: "Country X GDP 2020-2024"
+        data_questions_instructions = """2. THEN: Use GenerateDataQuestions to create 3-5 data-focused questions:
+               - 2-4 BASIC questions (fast search) for data lookups, comparisons, AND superlative/ranking queries:
+                 * Data lookups: "Country X GDP 2020-2024"
+                 * Superlatives: "Which cities have the highest rent?", "Which countries have the lowest unemployment?"
+                 * Rankings: "Top 10 companies by market cap"
+                 * Comparisons: "Compare GDP growth of X vs Y"
+               - 0-1 PREDICTION MARKET question (deep search) if relevant: "What are prediction market odds for X in 2025?"
                - Use the entities, metrics, cohorts, and time periods listed in the knowledge base context above when available
-               - Prefer exact entity/metric names from the knowledge base context for better search results
-               - 0-1 PREDICTION MARKET question if relevant: "What are prediction market odds for X in 2025?"
-               - Note: Deep/complex queries are currently disabled"""
+               - Prefer exact entity/metric names from the knowledge base context for better search results"""
 
     # Add status update for query analysis
     state["logs"] = state.get("logs", [])

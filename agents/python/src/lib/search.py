@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 # Configuration
-MAX_WEB_SEARCHES = 3
+MAX_WEB_SEARCHES = 1
 MAX_TOTAL_RESOURCES = 10  # Maximum total resources to prevent context bloat
 
 class ResourceInput(BaseModel):
@@ -108,9 +108,9 @@ async def search_node(state: AgentState, config: RunnableConfig):
         fast_questions = [q for q in data_questions if isinstance(q, dict) and q.get("search_effort") == "fast"]
         deep_questions = [q for q in data_questions if isinstance(q, dict) and q.get("search_effort") == "deep"]
 
-        # Filter out deep queries if disabled
+        # Filter out deep queries if disabled, BUT always allow prediction_market queries
         if not ENABLE_DEEP_QUERIES:
-            deep_questions = []
+            deep_questions = [q for q in deep_questions if q.get("query_type") == "prediction_market"]
 
         # Add logs for both web and Tako searches
         for query in queries:

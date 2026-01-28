@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
@@ -9,20 +9,72 @@ interface MarkdownRendererProps {
   content: string;
 }
 
+interface ExtractedEmbed {
+  id: string;
+  html: string;
+  src: string;
+}
+
+// Extract the iframe src from an HTML block
+function extractIframeSrc(html: string): string | null {
+  const srcMatch = html.match(/src=["']([^"']+)["']/);
+  return srcMatch ? srcMatch[1] : null;
+}
+
+// Generate a stable ID from the iframe src
+function generateEmbedId(src: string): string {
+  try {
+    const url = new URL(src);
+    return `embed-${url.pathname.replace(/[^a-zA-Z0-9]/g, "-")}`;
+  } catch {
+    return `embed-${src.replace(/[^a-zA-Z0-9]/g, "-").slice(0, 50)}`;
+  }
+}
+
 export function MarkdownRenderer({ content }: MarkdownRendererProps) {
+  // Persist embeds across renders - once an embed is found, it stays
+  const [embeds, setEmbeds] = useState<Map<string, ExtractedEmbed>>(new Map());
+  const [processedContent, setProcessedContent] = useState<string>("");
+
+  // Process content and extract embeds
+  useEffect(() => {
+    const embedPattern = /<!doctype html>[\s\S]*?<\/html>/gi;
+    let processed = content;
+    const matches = content.match(embedPattern) || [];
+
+    // Add any new embeds we find
+    const newEmbeds = new Map(embeds);
+    let hasNewEmbeds = false;
+
+    for (const match of matches) {
+      const src = extractIframeSrc(match);
+      if (src) {
+        const id = generateEmbedId(src);
+        if (!newEmbeds.has(id)) {
+          newEmbeds.set(id, { id, html: match, src });
+          hasNewEmbeds = true;
+        }
+        // Replace with placeholder
+        processed = processed.replace(match, `<div data-embed-placeholder="${id}"></div>`);
+      }
+    }
+
+    if (hasNewEmbeds) {
+      setEmbeds(newEmbeds);
+    }
+    setProcessedContent(processed);
+  }, [content]); // Note: embeds intentionally not in deps - we only add, never remove
+
   // Listen for Tako chart resize messages
   useEffect(() => {
     const handleTakoResize = (event: MessageEvent) => {
       const data = event.data;
-
-      // Early return if not a Tako resize message
       if (data.type !== "tako::resize") return;
 
-      // Find and resize the iframe that sent this message
-      const iframes = document.querySelectorAll("iframe");
+      const iframes = document.querySelectorAll<HTMLIFrameElement>("iframe[data-tako-embed]");
       for (const iframe of iframes) {
         if (iframe.contentWindow === event.source) {
-          iframe.style.height = `${data.height + 4}px`;
+          iframe.style.height = `${data.height}px`;
           break;
         }
       }
@@ -30,7 +82,10 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
 
     window.addEventListener("message", handleTakoResize);
     return () => window.removeEventListener("message", handleTakoResize);
-  }, [content]);
+  }, []);
+
+  // Memoized embed lookup function
+  const getEmbed = useCallback((id: string) => embeds.get(id), [embeds]);
 
   return (
     <div className="prose prose-slate max-w-none bg-background px-6 py-8 border-0 shadow-none rounded-xl">
@@ -38,7 +93,6 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeRaw]}
         components={{
-          // Custom renderer for HTML elements to allow iframes
           // eslint-disable-next-line @typescript-eslint/no-unused-vars
           h1: ({ node, ...props }) => (
             <h1 className="text-3xl font-bold mb-4 text-primary" {...props} />
@@ -78,7 +132,6 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
           ),
           // eslint-disable-next-line @typescript-eslint/no-unused-vars
           code: ({ node, className, children, ...props }) => {
-            // If there's a className with language-, it's a code block
             const isCodeBlock = className?.includes("language-");
             if (!isCodeBlock) {
               return (
@@ -99,18 +152,68 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
               </code>
             );
           },
+          // Render embed placeholders with stable iframe components
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          div: ({ node, ...props }) => {
+            const embedId = (node?.properties?.["dataEmbedPlaceholder"] as string) ||
+                           (props as Record<string, unknown>)["data-embed-placeholder"] as string | undefined;
+            if (embedId) {
+              const embed = getEmbed(embedId);
+              if (embed) {
+                return <StableEmbed key={embed.id} embed={embed} />;
+              }
+            }
+            return <div {...props} />;
+          },
           // eslint-disable-next-line @typescript-eslint/no-unused-vars
           iframe: ({ node, ...props }) => (
             <iframe
               {...props}
-              className="w-full border-0 rounded-lg mb-6"
-              style={{ minHeight: "400px" }}
+              className="w-full border-0 rounded-lg mb-4"
+              data-tako-embed="true"
             />
           ),
         }}
       >
-        {content}
+        {processedContent}
       </ReactMarkdown>
     </div>
   );
 }
+
+// Separate component for stable embed rendering
+const StableEmbed = React.memo(function StableEmbed({ embed }: { embed: ExtractedEmbed }) {
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  // Handle resize messages for this specific iframe
+  useEffect(() => {
+    const handleResize = (event: MessageEvent) => {
+      const data = event.data;
+      if (data.type !== "tako::resize") return;
+
+      if (iframeRef.current && iframeRef.current.contentWindow === event.source) {
+        iframeRef.current.style.height = `${data.height}px`;
+      }
+    };
+
+    window.addEventListener("message", handleResize);
+    return () => window.removeEventListener("message", handleResize);
+  }, []);
+
+  return (
+    <div className="w-full mb-4">
+      <iframe
+        ref={iframeRef}
+        src={embed.src}
+        className="w-full border-0 rounded-lg"
+        style={{ height: "400px" }}
+        scrolling="no"
+        frameBorder="0"
+        allow="fullscreen"
+        data-tako-embed="true"
+      />
+    </div>
+  );
+}, (prevProps, nextProps) => {
+  return prevProps.embed.src === nextProps.embed.src;
+});

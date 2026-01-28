@@ -32,9 +32,11 @@ export function ResearchCanvas() {
     },
   });
 
-  // Maintain stable resources to prevent flickering during state updates
-  // Resources persist on screen even during intermediate state updates
+  // Maintain stable state to prevent flickering during state updates
+  // Values persist on screen even during intermediate state updates
   const [stableResources, setStableResources] = useState<Resource[]>([]);
+  const [stableReport, setStableReport] = useState<string>("");
+  const [stableResearchQuestion, setStableResearchQuestion] = useState<string>("");
 
   useEffect(() => {
     // Update stable resources when new resources arrive
@@ -43,6 +45,20 @@ export function ResearchCanvas() {
     }
     // Keep existing resources displayed during transitions to prevent flickering
   }, [state.resources]);
+
+  useEffect(() => {
+    // Update stable report when new content arrives
+    if (state.report && state.report.length > 0) {
+      setStableReport(state.report);
+    }
+  }, [state.report]);
+
+  useEffect(() => {
+    // Update stable research question when new content arrives
+    if (state.research_question && state.research_question.length > 0) {
+      setStableResearchQuestion(state.research_question);
+    }
+  }, [state.research_question]);
 
   useCoAgentStateRender({
     name: agent,
@@ -198,8 +214,8 @@ export function ResearchCanvas() {
             className="bg-background px-6 py-8 border-0 shadow-none rounded-xl text-md font-extralight min-h-[60px] flex items-center"
             aria-label="Research question"
           >
-            {state.research_question ? (
-              <p className="text-foreground">{state.research_question}</p>
+            {stableResearchQuestion ? (
+              <p className="text-foreground">{stableResearchQuestion}</p>
             ) : (
               <p className="text-slate-400">
                 The agent will automatically identify your research question from your query...
@@ -338,13 +354,17 @@ export function ResearchCanvas() {
           </div>
 
           {isViewMode ? (
-            <MarkdownRenderer content={state.report || ""} />
+            <MarkdownRenderer content={stableReport || ""} />
           ) : (
             <Textarea
               data-test-id="research-draft"
               placeholder="Write your research draft here"
-              value={state.report || ""}
-              onChange={(e) => setState({ ...state, report: e.target.value })}
+              value={stableReport || ""}
+              onChange={(e) => {
+                const newValue = e.target.value;
+                setStableReport(newValue);
+                setState({ ...state, report: newValue });
+              }}
               rows={10}
               aria-label="Research draft"
               className="bg-background px-6 py-8 border-0 shadow-none rounded-xl text-md font-extralight focus-visible:ring-0 placeholder:text-slate-400"
