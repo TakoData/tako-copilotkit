@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { ChevronDown } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -32,10 +32,26 @@ export function ResearchCanvas() {
     },
   });
 
-  // Use state values directly - the agent state is the source of truth
-  const resources = state.resources || [];
-  const report = state.report || "";
-  const researchQuestion = state.research_question || "";
+  // Use refs to persist last known good values (prevents flicker on partial state updates)
+  const lastResourcesRef = useRef<Resource[]>([]);
+  const lastReportRef = useRef<string>("");
+  const lastQuestionRef = useRef<string>("");
+
+  // Update refs when we get valid values, use ref values as fallback
+  if (state.resources && state.resources.length > 0) {
+    lastResourcesRef.current = state.resources;
+  }
+  if (state.report && state.report.length > 0) {
+    lastReportRef.current = state.report;
+  }
+  if (state.research_question && state.research_question.length > 0) {
+    lastQuestionRef.current = state.research_question;
+  }
+
+  // Use current state if available, otherwise fall back to last known good value
+  const resources = (state.resources && state.resources.length > 0) ? state.resources : lastResourcesRef.current;
+  const report = (state.report && state.report.length > 0) ? state.report : lastReportRef.current;
+  const researchQuestion = (state.research_question && state.research_question.length > 0) ? state.research_question : lastQuestionRef.current;
 
   useCoAgentStateRender({
     name: agent,

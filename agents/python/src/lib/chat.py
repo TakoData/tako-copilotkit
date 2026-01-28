@@ -75,14 +75,11 @@ async def chat_node(
     """
     logger.info("=== CHAT_NODE: Starting execution ===")
 
+    # Note: report is NOT in emit_intermediate_state to prevent flicker
+    # The report is only emitted once charts are injected
     config = copilotkit_customize_config(
         config,
         emit_intermediate_state=[
-            {
-                "state_key": "report",
-                "tool": "WriteReport",
-                "tool_argument": "report",
-            },
             {
                 "state_key": "research_question",
                 "tool": "WriteResearchQuestion",
@@ -236,7 +233,15 @@ async def chat_node(
     ai_message = cast(AIMessage, response)
     if ai_message.tool_calls:
         if ai_message.tool_calls[0]["name"] == "WriteReport":
+            # Add progress indicator for report generation
+            state["logs"].append({"message": "Writing research report...", "done": False})
+            await copilotkit_emit_state(config, state)
+
             report = ai_message.tool_calls[0]["args"].get("report", "")
+
+            # Mark report writing as done
+            state["logs"][-1]["done"] = True
+            await copilotkit_emit_state(config, state)
 
             # Clean up: Remove any markdown image links that the LLM incorrectly added
             import re
@@ -253,6 +258,8 @@ async def chat_node(
             # Second pass: Inject charts at appropriate positions
             processed_report = report
             if tako_charts_map:
+                state["logs"].append({"message": "Inserting data visualizations...", "done": False})
+                await copilotkit_emit_state(config, state)
                 # Build chart list for injection prompt
                 chart_list = "\n".join([f"- {title}" for title in tako_charts_map.keys()])
 
@@ -326,6 +333,14 @@ This growth was driven by...
                     processed_report = processed_report[:start] + replacement + processed_report[end:]
 
                 logger.info(f"Injected {len([r for r in replacements if r[2]])} charts into report")
+
+                # Mark chart injection as done
+                state["logs"][-1]["done"] = True
+                await copilotkit_emit_state(config, state)
+
+            # Clear logs before showing final report
+            state["logs"] = []
+            await copilotkit_emit_state(config, state)
 
             return Command(
                 goto="chat_node",
