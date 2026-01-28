@@ -199,12 +199,16 @@ async def chat_node(
 {available_tako_charts_str}
 
             WRITING GUIDELINES:
-            - Write clear, informative prose that references the data from the charts
-            - DO NOT include any chart markers, image syntax, or embed codes - charts will be automatically appended
+            - Write a COMPREHENSIVE report with substantial analysis and narrative text
+            - Use the chart descriptions above AND web resources to write detailed, insightful paragraphs
+            - For EACH chart, write at least 1-2 paragraphs discussing its key insights, trends, and implications
+            - Structure the report so that text naturally leads into and follows from each data point
+            - DO NOT include any chart markers, image syntax, or embed codes - charts will be inserted automatically
             - DO NOT use markdown image syntax like ![title](url)
             - DO NOT include external links like tradingeconomics.com
-            - Focus on analysis and insights from the data
-            - Reference specific data points and trends from the chart descriptions above
+            - Focus on analysis and insights - explain WHAT the data shows and WHY it matters
+            - Reference specific data points, numbers, and trends from the chart descriptions
+            - Connect insights across multiple charts to tell a cohesive story
 
             You should use the search tool to get resources before answering the user's question.
             Use the content and descriptions from both Tako charts and web resources to inform your report.
@@ -280,12 +284,33 @@ RULES:
 6. Do not modify the text content, only add markers
 7. Add a blank line before and after each marker
 
-Example:
+CRITICAL PLACEMENT RULES:
+8. NEVER place more than two charts consecutively - there MUST be at least one paragraph of text between any two charts
+9. NEVER append multiple charts at the end of the report - distribute them throughout the text
+10. Each chart should be placed IMMEDIATELY after the paragraph that discusses its specific data/topic
+11. If the report doesn't have enough text to properly intersperse all charts, place charts where they're most relevant and leave remaining charts unplaced rather than clustering them
+
+Example of GOOD placement:
 The economy grew significantly in 2023...
 
 [CHART:GDP Growth 2023]
 
-This growth was driven by...
+This growth was driven by consumer spending. Meanwhile, unemployment continued its downward trend...
+
+[CHART:Unemployment Rate 2023]
+
+The labor market strength contributed to...
+
+Example of BAD placement (DO NOT DO THIS):
+The economy grew significantly in 2023...
+This growth was driven by consumer spending...
+The labor market showed improvement...
+
+[CHART:GDP Growth 2023]
+
+[CHART:Unemployment Rate 2023]
+
+[CHART:Inflation Data 2023]
 """),
                         HumanMessage(content=f"Insert chart markers into this report:\n\n{report}")
                     ],
