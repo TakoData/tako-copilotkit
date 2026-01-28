@@ -75,14 +75,11 @@ async def chat_node(
     """
     logger.info("=== CHAT_NODE: Starting execution ===")
 
+    # Note: report is NOT in emit_intermediate_state to prevent flicker
+    # The report is only emitted once charts are injected
     config = copilotkit_customize_config(
         config,
         emit_intermediate_state=[
-            {
-                "state_key": "report",
-                "tool": "WriteReport",
-                "tool_argument": "report",
-            },
             {
                 "state_key": "research_question",
                 "tool": "WriteResearchQuestion",
@@ -202,17 +199,21 @@ async def chat_node(
 {available_tako_charts_str}
 
             WRITING GUIDELINES:
-            - Write clear, informative prose that references the data from the charts
-            - DO NOT include any chart markers, image syntax, or embed codes - charts will be automatically appended
+            - Write a COMPREHENSIVE report with substantial analysis and narrative text
+            - Use the chart descriptions above AND web resources to write detailed, insightful paragraphs
+            - For EACH chart, write at least 1-2 paragraphs discussing its key insights, trends, and implications
+            - Structure the report so that text naturally leads into and follows from each data point
+            - DO NOT include any chart markers, image syntax, or embed codes - charts will be inserted automatically
             - DO NOT use markdown image syntax like ![title](url)
             - DO NOT include external links like tradingeconomics.com
-            - Focus on analysis and insights from the data
-            - Reference specific data points and trends from the chart descriptions above
+            - Focus on analysis and insights - explain WHAT the data shows and WHY it matters
+            - Reference specific data points, numbers, and trends from the chart descriptions
+            - Connect insights across multiple charts to tell a cohesive story
 
             You should use the search tool to get resources before answering the user's question.
             Use the content and descriptions from both Tako charts and web resources to inform your report.
-            If you finished writing the report, ask the user proactively for next steps, changes etc, make it engaging.
-            To write the report, you should use the WriteReport tool. Never EVER respond with the report, only use the tool.
+            To write the report, you should use the WriteReport tool. Never EVER respond with the report content, only use the tool.
+            After writing the report, send a brief (1-2 sentence) follow-up asking if the user wants any changes or has questions. Do NOT summarize or repeat the report content in the chat.
 
             This is the research question:
             {research_question}
@@ -236,7 +237,15 @@ async def chat_node(
     ai_message = cast(AIMessage, response)
     if ai_message.tool_calls:
         if ai_message.tool_calls[0]["name"] == "WriteReport":
+            # Add progress indicator for report generation
+            state["logs"].append({"message": "Writing research report...", "done": False})
+            await copilotkit_emit_state(config, state)
+
             report = ai_message.tool_calls[0]["args"].get("report", "")
+
+            # Mark report writing as done
+            state["logs"][-1]["done"] = True
+            await copilotkit_emit_state(config, state)
 
             # Clean up: Remove any markdown image links that the LLM incorrectly added
             import re
@@ -253,6 +262,8 @@ async def chat_node(
             # Second pass: Inject charts at appropriate positions
             processed_report = report
             if tako_charts_map:
+                state["logs"].append({"message": "Inserting data visualizations...", "done": False})
+                await copilotkit_emit_state(config, state)
                 # Build chart list for injection prompt
                 chart_list = "\n".join([f"- {title}" for title in tako_charts_map.keys()])
 
@@ -273,12 +284,33 @@ RULES:
 6. Do not modify the text content, only add markers
 7. Add a blank line before and after each marker
 
-Example:
+CRITICAL PLACEMENT RULES:
+8. NEVER place more than two charts consecutively - there MUST be at least one paragraph of text between any two charts
+9. NEVER append multiple charts at the end of the report - distribute them throughout the text
+10. Each chart should be placed IMMEDIATELY after the paragraph that discusses its specific data/topic
+11. If the report doesn't have enough text to properly intersperse all charts, place charts where they're most relevant and leave remaining charts unplaced rather than clustering them
+
+Example of GOOD placement:
 The economy grew significantly in 2023...
 
 [CHART:GDP Growth 2023]
 
-This growth was driven by...
+This growth was driven by consumer spending. Meanwhile, unemployment continued its downward trend...
+
+[CHART:Unemployment Rate 2023]
+
+The labor market strength contributed to...
+
+Example of BAD placement (DO NOT DO THIS):
+The economy grew significantly in 2023...
+This growth was driven by consumer spending...
+The labor market showed improvement...
+
+[CHART:GDP Growth 2023]
+
+[CHART:Unemployment Rate 2023]
+
+[CHART:Inflation Data 2023]
 """),
                         HumanMessage(content=f"Insert chart markers into this report:\n\n{report}")
                     ],
@@ -327,6 +359,14 @@ This growth was driven by...
 
                 logger.info(f"Injected {len([r for r in replacements if r[2]])} charts into report")
 
+                # Mark chart injection as done
+                state["logs"][-1]["done"] = True
+                await copilotkit_emit_state(config, state)
+
+            # Clear logs before showing final report
+            state["logs"] = []
+            await copilotkit_emit_state(config, state)
+
             return Command(
                 goto="chat_node",
                 update={
@@ -336,7 +376,7 @@ This growth was driven by...
                         ai_message,
                         ToolMessage(
                             tool_call_id=ai_message.tool_calls[0]["id"],
-                            content="Report written.",
+                            content="Report written successfully. Now send a brief follow-up message asking if the user wants any changes or has questions. Do NOT repeat the report content.",
                         ),
                     ],
                 },
