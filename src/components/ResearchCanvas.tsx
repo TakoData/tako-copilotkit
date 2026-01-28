@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -32,38 +32,10 @@ export function ResearchCanvas() {
     },
   });
 
-  // Maintain stable state to prevent flickering during state updates
-  // Values persist on screen even during intermediate state updates
-  const [stableResources, setStableResources] = useState<Resource[]>([]);
-  const [stableReport, setStableReport] = useState<string>("");
-  const [stableResearchQuestion, setStableResearchQuestion] = useState<string>("");
-
-  // Refs to track previous values and prevent update loops
-  const prevReportRef = useRef<string>("");
-  const prevQuestionRef = useRef<string>("");
-
-  useEffect(() => {
-    // Update stable resources when new resources arrive
-    if (state.resources && state.resources.length > 0) {
-      setStableResources(state.resources);
-    }
-  }, [state.resources]);
-
-  useEffect(() => {
-    // Update stable report when new content arrives from agent (not user edits)
-    if (state.report && state.report !== prevReportRef.current) {
-      prevReportRef.current = state.report;
-      setStableReport(state.report);
-    }
-  }, [state.report]);
-
-  useEffect(() => {
-    // Update stable research question when new content arrives
-    if (state.research_question && state.research_question !== prevQuestionRef.current) {
-      prevQuestionRef.current = state.research_question;
-      setStableResearchQuestion(state.research_question);
-    }
-  }, [state.research_question]);
+  // Use state values directly - the agent state is the source of truth
+  const resources = state.resources || [];
+  const report = state.report || "";
+  const researchQuestion = state.research_question || "";
 
   useCoAgentStateRender({
     name: agent,
@@ -111,7 +83,7 @@ export function ResearchCanvas() {
             Delete these resources?
           </div>
           <Resources
-            resources={stableResources.filter((resource) =>
+            resources={resources.filter((resource) =>
               (args.urls || []).includes(resource.url)
             )}
             customWidth={200}
@@ -138,14 +110,9 @@ export function ResearchCanvas() {
     },
   });
 
-  // Use stable resources for display
-  const resources: Resource[] = stableResources;
-  const setResources = (resources: Resource[]) => {
-    setState({ ...state, resources });
-    setStableResources(resources);
+  const setResources = (newResources: Resource[]) => {
+    setState({ ...state, resources: newResources });
   };
-
-  // const [resources, setResources] = useState<Resource[]>(dummyResources);
   const [newResource, setNewResource] = useState<Resource>({
     url: "",
     title: "",
@@ -219,8 +186,8 @@ export function ResearchCanvas() {
             className="bg-background px-6 py-8 border-0 shadow-none rounded-xl text-md font-extralight min-h-[60px] flex items-center"
             aria-label="Research question"
           >
-            {stableResearchQuestion ? (
-              <p className="text-foreground">{stableResearchQuestion}</p>
+            {researchQuestion ? (
+              <p className="text-foreground">{researchQuestion}</p>
             ) : (
               <p className="text-slate-400">
                 The agent will automatically identify your research question from your query...
@@ -359,17 +326,14 @@ export function ResearchCanvas() {
           </div>
 
           {isViewMode ? (
-            <MarkdownRenderer content={stableReport || ""} />
+            <MarkdownRenderer content={report || ""} />
           ) : (
             <Textarea
               data-test-id="research-draft"
               placeholder="Write your research draft here"
-              value={stableReport || ""}
+              value={report || ""}
               onChange={(e) => {
-                const newValue = e.target.value;
-                prevReportRef.current = newValue;
-                setStableReport(newValue);
-                setState({ ...state, report: newValue });
+                setState({ ...state, report: e.target.value });
               }}
               rows={10}
               aria-label="Research draft"

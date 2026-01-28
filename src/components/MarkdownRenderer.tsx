@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState, useCallback } from "react";
+import React, { useEffect, useRef, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
@@ -31,39 +31,38 @@ function generateEmbedId(src: string): string {
   }
 }
 
-export function MarkdownRenderer({ content }: MarkdownRendererProps) {
-  // Persist embeds across renders - once an embed is found, it stays
-  const [embeds, setEmbeds] = useState<Map<string, ExtractedEmbed>>(new Map());
-  const [processedContent, setProcessedContent] = useState<string>("");
+// Module-level cache for embeds to persist across re-renders
+const embedCache = new Map<string, ExtractedEmbed>();
 
-  // Process content and extract embeds
-  useEffect(() => {
+export function MarkdownRenderer({ content }: MarkdownRendererProps) {
+  // Process content and extract embeds using useMemo (no state updates)
+  const { processedContent, embeds } = useMemo(() => {
     const embedPattern = /<!doctype html>[\s\S]*?<\/html>/gi;
     let processed = content;
     const matches = content.match(embedPattern) || [];
-
-    // Add any new embeds we find
-    const newEmbeds = new Map(embeds);
-    let hasNewEmbeds = false;
+    const currentEmbeds = new Map<string, ExtractedEmbed>();
 
     for (const match of matches) {
       const src = extractIframeSrc(match);
       if (src) {
         const id = generateEmbedId(src);
-        if (!newEmbeds.has(id)) {
-          newEmbeds.set(id, { id, html: match, src });
-          hasNewEmbeds = true;
+
+        // Use cached embed if available, otherwise create new
+        if (embedCache.has(id)) {
+          currentEmbeds.set(id, embedCache.get(id)!);
+        } else {
+          const embed = { id, html: match, src };
+          embedCache.set(id, embed);
+          currentEmbeds.set(id, embed);
         }
+
         // Replace with placeholder
         processed = processed.replace(match, `<div data-embed-placeholder="${id}"></div>`);
       }
     }
 
-    if (hasNewEmbeds) {
-      setEmbeds(newEmbeds);
-    }
-    setProcessedContent(processed);
-  }, [content]); // Note: embeds intentionally not in deps - we only add, never remove
+    return { processedContent: processed, embeds: currentEmbeds };
+  }, [content]);
 
   // Listen for Tako chart resize messages
   useEffect(() => {
@@ -83,9 +82,6 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
     window.addEventListener("message", handleTakoResize);
     return () => window.removeEventListener("message", handleTakoResize);
   }, []);
-
-  // Memoized embed lookup function
-  const getEmbed = useCallback((id: string) => embeds.get(id), [embeds]);
 
   return (
     <div className="prose prose-slate max-w-none bg-background px-6 py-8 border-0 shadow-none rounded-xl">
@@ -158,7 +154,7 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
             const embedId = (node?.properties?.["dataEmbedPlaceholder"] as string) ||
                            (props as Record<string, unknown>)["data-embed-placeholder"] as string | undefined;
             if (embedId) {
-              const embed = getEmbed(embedId);
+              const embed = embeds.get(embedId);
               if (embed) {
                 return <StableEmbed key={embed.id} embed={embed} />;
               }
