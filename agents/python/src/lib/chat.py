@@ -208,8 +208,8 @@ async def chat_node(
 
             You should use the search tool to get resources before answering the user's question.
             Use the content and descriptions from both Tako charts and web resources to inform your report.
-            If you finished writing the report, ask the user proactively for next steps, changes etc, make it engaging.
-            To write the report, you should use the WriteReport tool. Never EVER respond with the report, only use the tool.
+            To write the report, you should use the WriteReport tool. Never EVER respond with the report content, only use the tool.
+            After writing the report, send a brief (1-2 sentence) follow-up asking if the user wants any changes or has questions. Do NOT summarize or repeat the report content in the chat.
 
             This is the research question:
             {research_question}
@@ -351,7 +351,7 @@ This growth was driven by...
                         ai_message,
                         ToolMessage(
                             tool_call_id=ai_message.tool_calls[0]["id"],
-                            content="Report written.",
+                            content="Report written successfully. Now send a brief follow-up message asking if the user wants any changes or has questions. Do NOT repeat the report content.",
                         ),
                     ],
                 },
