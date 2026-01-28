@@ -25,30 +25,30 @@ function generateEmbedId(src: string): string {
   }
 }
 
-// Memoized components object
+// Memoized components object - using type assertion to avoid react-markdown's complex types
 const markdownComponents = {
-  h1: ({ node, ...props }: any) => (
+  h1: (props: React.ComponentPropsWithoutRef<"h1">) => (
     <h1 className="text-3xl font-bold mb-4 text-primary" {...props} />
   ),
-  h2: ({ node, ...props }: any) => (
+  h2: (props: React.ComponentPropsWithoutRef<"h2">) => (
     <h2 className="text-2xl font-semibold mb-3 mt-6 text-primary" {...props} />
   ),
-  h3: ({ node, ...props }: any) => (
+  h3: (props: React.ComponentPropsWithoutRef<"h3">) => (
     <h3 className="text-xl font-semibold mb-2 mt-4 text-primary" {...props} />
   ),
-  p: ({ node, ...props }: any) => (
+  p: (props: React.ComponentPropsWithoutRef<"p">) => (
     <p className="mb-4 text-foreground leading-relaxed" {...props} />
   ),
-  ul: ({ node, ...props }: any) => (
+  ul: (props: React.ComponentPropsWithoutRef<"ul">) => (
     <ul className="list-disc list-inside mb-4 space-y-2" {...props} />
   ),
-  ol: ({ node, ...props }: any) => (
+  ol: (props: React.ComponentPropsWithoutRef<"ol">) => (
     <ol className="list-decimal list-inside mb-4 space-y-2" {...props} />
   ),
-  li: ({ node, ...props }: any) => (
+  li: (props: React.ComponentPropsWithoutRef<"li">) => (
     <li className="text-foreground" {...props} />
   ),
-  a: ({ node, ...props }: any) => (
+  a: (props: React.ComponentPropsWithoutRef<"a">) => (
     <a
       className="text-[#6766FC] hover:underline"
       target="_blank"
@@ -56,7 +56,7 @@ const markdownComponents = {
       {...props}
     />
   ),
-  code: ({ node, className, children, ...props }: any) => {
+  code: ({ className, children, ...props }: React.ComponentPropsWithoutRef<"code">) => {
     const isCodeBlock = className?.includes("language-");
     if (!isCodeBlock) {
       return (
@@ -162,7 +162,7 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
 
 // Stable iframe component - memoized to prevent re-renders
 const StableIframe = React.memo(
-  function StableIframe({ id, src }: { id: string; src: string }) {
+  function StableIframe({ src }: { id: string; src: string }) {
     const iframeRef = useRef<HTMLIFrameElement>(null);
 
     // Handle resize messages from Tako embeds
