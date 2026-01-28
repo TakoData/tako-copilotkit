@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 # Configuration
-MAX_WEB_SEARCHES = 3
+MAX_WEB_SEARCHES = 1
 MAX_TOTAL_RESOURCES = 10  # Maximum total resources to prevent context bloat
 
 class ResourceInput(BaseModel):
@@ -108,9 +108,9 @@ async def search_node(state: AgentState, config: RunnableConfig):
         fast_questions = [q for q in data_questions if isinstance(q, dict) and q.get("search_effort") == "fast"]
         deep_questions = [q for q in data_questions if isinstance(q, dict) and q.get("search_effort") == "deep"]
 
-        # Filter out deep queries if disabled
+        # Filter out deep queries if disabled, BUT always allow prediction_market queries
         if not ENABLE_DEEP_QUERIES:
-            deep_questions = []
+            deep_questions = [q for q in deep_questions if q.get("query_type") == "prediction_market"]
 
         # Add logs for both web and Tako searches
         for query in queries:
@@ -161,6 +161,30 @@ async def search_node(state: AgentState, config: RunnableConfig):
                 tako_results.extend(result)
             state["logs"][log_index]["done"] = True
             await copilotkit_emit_state(config, state)
+
+        # RETRY LOGIC: If no Tako results found, retry with 2 additional web searches
+        if not tako_results and fast_questions:
+            logger.info("No Tako results found, retrying with web searches")
+            # Use up to 2 questions for web search fallback
+            fallback_queries = [q["question"] for q in fast_questions[:2]]
+
+            for query in fallback_queries:
+                state["logs"].append({"message": f"Tako Web Search: {query}", "done": False})
+            await copilotkit_emit_state(config, state)
+
+            fallback_tasks = [async_tavily_search(query) for query in fallback_queries]
+            fallback_results = await asyncio.gather(*fallback_tasks, return_exceptions=True)
+
+            for i, result in enumerate(fallback_results):
+                if isinstance(result, Exception):
+                    search_results.append({"error": str(result)})
+                else:
+                    search_results.append(result)
+                # Mark the fallback log as done
+                state["logs"][-(len(fallback_queries) - i)]["done"] = True
+                await copilotkit_emit_state(config, state)
+
+            logger.info(f"Fallback web search completed with {len([r for r in fallback_results if not isinstance(r, Exception)])} results")
 
         for i, q_obj in enumerate(deep_questions):
             log_index = num_tavily + len(fast_questions) + i

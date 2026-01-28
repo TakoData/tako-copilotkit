@@ -5,7 +5,7 @@ from typing import List, Literal, cast
 
 from copilotkit.langgraph import copilotkit_customize_config, copilotkit_emit_state
 from langchain.tools import tool
-from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import Command
 
@@ -48,15 +48,20 @@ def GenerateDataQuestions(questions: List[DataQuestion]):  # pylint: disable=inv
     """
     Generate 3-6 data-focused questions to search Tako's knowledge base.
 
-    Create a diverse set of questions with different complexity levels:
-    - 2-3 basic questions (search_effort='fast') for straightforward data lookups
-    - 1-2 complex questions (search_effort='deep') for in-depth analysis
+    Create a diverse set of questions:
+    - 2-4 basic questions (search_effort='fast') for straightforward data lookups AND superlative/ranking queries
     - 0-1 prediction market questions (search_effort='deep') about forecasts, probabilities, or future outcomes
+
+    IMPORTANT - Include superlative/ranking queries (use fast search):
+    - "Which countries have the highest GDP per capita?"
+    - "Which cities have the highest rent?"
+    - "What are the top 10 companies by market cap?"
 
     Example:
     [
         {"question": "China GDP since 1960", "search_effort": "fast", "query_type": "basic"},
-        {"question": "Compare year-over-year growth in exports for east asian countries", "search_effort": "deep", "query_type": "complex"},
+        {"question": "Which countries have the highest inflation rates in 2024?", "search_effort": "fast", "query_type": "basic"},
+        {"question": "Compare exports for east asian countries", "search_effort": "fast", "query_type": "basic"},
         {"question": "What are prediction market odds for China invading Taiwan in 2025?", "search_effort": "deep", "query_type": "prediction_market"}
     ]
     """
@@ -143,17 +148,20 @@ async def chat_node(
     if ENABLE_DEEP_QUERIES:
         data_questions_instructions = """2. THEN: Use GenerateDataQuestions to create 3-6 data-focused questions with varied complexity:
                - 2-3 BASIC questions (fast search) for straightforward data: "Country X GDP 2020-2024"
-               - 1-2 COMPLEX questions (deep search) for analytical insights: "What factors drove X's growth?"
-               - 0-1 PREDICTION MARKET question (deep search) if relevant: "What are odds for X in 2025?"
+               - 1-2 COMPLEX questions (deep search) for analytical insights
+               - 0-1 PREDICTION MARKET question (deep search) if relevant: "What are prediction market odds for X in 2025?"
                - Use the entities, metrics, cohorts, and time periods listed in the knowledge base context above when available
                - Prefer exact entity/metric names from the knowledge base context for better search results"""
     else:
-        data_questions_instructions = """2. THEN: Use GenerateDataQuestions to create 2-4 BASIC data-focused questions (fast search only):
-               - Focus on straightforward data lookups: "Country X GDP 2020-2024"
+        data_questions_instructions = """2. THEN: Use GenerateDataQuestions to create 3-5 data-focused questions:
+               - 2-4 BASIC questions (fast search) for data lookups, comparisons, AND superlative/ranking queries:
+                 * Data lookups: "Country X GDP 2020-2024"
+                 * Superlatives: "Which cities have the highest rent?", "Which countries have the lowest unemployment?"
+                 * Rankings: "Top 10 companies by market cap"
+                 * Comparisons: "Compare GDP growth of X vs Y"
+               - 0-1 PREDICTION MARKET question (deep search) if relevant: "What are prediction market odds for X in 2025?"
                - Use the entities, metrics, cohorts, and time periods listed in the knowledge base context above when available
-               - Prefer exact entity/metric names from the knowledge base context for better search results
-               - 0-1 PREDICTION MARKET question if relevant: "What are prediction market odds for X in 2025?"
-               - Note: Deep/complex queries are currently disabled"""
+               - Prefer exact entity/metric names from the knowledge base context for better search results"""
 
     # Add status update for query analysis
     state["logs"] = state.get("logs", [])
@@ -165,7 +173,6 @@ async def chat_node(
             Search,
             WriteReport,
             WriteResearchQuestion,
-            DeleteResources,
             GenerateDataQuestions,
         ],
         **ainvoke_kwargs,  # Pass the kwargs conditionally
@@ -183,7 +190,7 @@ async def chat_node(
             {data_questions_instructions}
             3. These questions will search Tako for relevant charts and visualizations
             4. Use the Search tool for web resources
-            5. When writing the report, err on the side of using Tako charts wherever relevant and include [TAKO_CHART:title] markers
+            5. Write a clear, well-structured report using the data from your searches
             6. Combine insights from both Tako charts and web resources in your report
 
             IMPORTANT ABOUT RESEARCH QUESTION:
@@ -191,45 +198,16 @@ async def chat_node(
             - This creates a clear, focused question from their natural language query
             - If a research question is already provided, YOU MUST NOT ASK FOR IT AGAIN
 
-            CRITICAL - EMBEDDING TAKO CHARTS IN REPORT:
-            When writing your report, you can embed Tako chart visualizations using special markers.
-
-            SYNTAX: [TAKO_CHART:exact_title_of_chart]
-
-            AVAILABLE TAKO CHARTS ({len(tako_charts_map)} total):
+            AVAILABLE DATA VISUALIZATIONS ({len(tako_charts_map)} charts):
 {available_tako_charts_str}
 
-            **Remember: You have {len(tako_charts_map)} charts available above. They are already fetched and ready to embed. Include at least 3-5 charts in your report!**
-
-            IMPORTANT RULES:
-            - DO NOT use markdown image syntax like ![title](url) - this will NOT work
-            - DO NOT use HTML img tags - this will NOT work
-            - ONLY use the [TAKO_CHART:title] marker syntax
+            WRITING GUIDELINES:
+            - Write clear, informative prose that references the data from the charts
+            - DO NOT include any chart markers, image syntax, or embed codes - charts will be automatically appended
+            - DO NOT use markdown image syntax like ![title](url)
             - DO NOT include external links like tradingeconomics.com
-            - ONLY use charts from the AVAILABLE TAKO CHARTS list above
-
-            EXAMPLE (CORRECT):
-            ## Economic Growth Analysis
-
-            China's economy has shown significant growth over the past decade...
-
-            [TAKO_CHART:China GDP]
-
-            The data visualization above shows the dramatic increase in GDP...
-
-            RULES FOR EMBEDDING CHARTS (MANDATORY):
-            - **MINIMUM REQUIREMENT**: Include at least 3-5 relevant charts in your report (more if appropriate)
-            - **CRITICAL**: Err on the side of INCLUDING charts - if a chart is relevant, embed it!
-            - Use [TAKO_CHART:exact_title] syntax to embed charts
-            - The title must EXACTLY match one of the available charts listed above (copy the title from the bold text)
-            - Position markers where you want the interactive chart to appear
-            - Add a brief explanatory sentence before and after each chart
-            - Charts are PRIMARY evidence - your report should include multiple charts with supporting text
-            - Distribute charts throughout your report in relevant sections
-            - Only skip a chart if it has no relevance to the research question
-            - The chart will be automatically rendered as an interactive visualization
-
-            **IMPORTANT**: Aim to include at least 3-5 charts from the list above to provide strong data-driven evidence!
+            - Focus on analysis and insights from the data
+            - Reference specific data points and trends from the chart descriptions above
 
             You should use the search tool to get resources before answering the user's question.
             Use the content and descriptions from both Tako charts and web resources to inform your report.
@@ -261,69 +239,93 @@ async def chat_node(
             report = ai_message.tool_calls[0]["args"].get("report", "")
 
             # Clean up: Remove any markdown image links that the LLM incorrectly added
-            # Pattern: ![title](url) where url contains tradingeconomics, worldbank, etc.
             import re
             external_domains = r'(tradingeconomics|worldbank|imf|fred|ourworldindata|statista)'
             report = re.sub(rf'!\[([^\]]+)\]\(https?://[^)]*{external_domains}[^)]*\)',
                           r'', report, flags=re.IGNORECASE)
 
-            # Remove any other markdown images that aren't Tako charts
+            # Remove any markdown images
             report = re.sub(r'!\[[^\]]*\]\([^)]+\)', '', report)
 
-            # Post-process: Replace Tako chart markers with actual iframe HTML
-            embedded_charts = []
-            async def replace_chart_marker_async(match):
-                chart_title = match.group(1).strip()
+            # Remove any leftover chart markers (in case model still added them)
+            report = re.sub(r'\[TAKO_CHART:[^\]]+\]', '', report)
 
-                # Try exact match first
-                chart_info = None
-                if chart_title in tako_charts_map:
-                    chart_info = tako_charts_map[chart_title]
-                # Try case-insensitive match
-                elif any(title.lower() == chart_title.lower() for title in tako_charts_map.keys()):
-                    # Find the matching title (case-insensitive)
-                    matching_title = next(title for title in tako_charts_map.keys() if title.lower() == chart_title.lower())
-                    chart_info = tako_charts_map[matching_title]
-                    logger.warning(f"Chart title case mismatch: '{chart_title}' matched to '{matching_title}'")
-                else:
-                    logger.error(f"Chart not found: '{chart_title}'. Available: {list(tako_charts_map.keys())}")
-                    # Don't inject anything if chart not found - just remove the marker
-                    return ""
+            # Second pass: Inject charts at appropriate positions
+            processed_report = report
+            if tako_charts_map:
+                # Build chart list for injection prompt
+                chart_list = "\n".join([f"- {title}" for title in tako_charts_map.keys()])
 
-                embedded_charts.append(chart_title)
-                # Generate iframe HTML on demand
-                iframe_html = await get_visualization_iframe(
-                    item_id=chart_info.get("card_id"),
-                    embed_url=chart_info.get("embed_url")
+                # Ask model to insert chart markers at appropriate positions
+                inject_response = await model.ainvoke(
+                    [
+                        SystemMessage(content=f"""You are a report editor. Your task is to insert chart markers into the report at appropriate positions.
+
+AVAILABLE CHARTS:
+{chart_list}
+
+RULES:
+1. Insert [CHART:exact_title] markers where each chart would best support the text
+2. Place markers AFTER the relevant paragraph (not in the middle of text)
+3. Each chart should be used exactly once
+4. Only use charts from the AVAILABLE CHARTS list above
+5. Return the COMPLETE report with markers inserted
+6. Do not modify the text content, only add markers
+7. Add a blank line before and after each marker
+
+Example:
+The economy grew significantly in 2023...
+
+[CHART:GDP Growth 2023]
+
+This growth was driven by...
+"""),
+                        HumanMessage(content=f"Insert chart markers into this report:\n\n{report}")
+                    ],
+                    config
                 )
 
-                if iframe_html:
-                    # Remove script tags - resize listener is handled in React component
-                    iframe_only = re.sub(r'<script.*?</script>', '', iframe_html, flags=re.DOTALL)
-                    # Strip any extra whitespace and return with minimal spacing
-                    return "\n" + iframe_only.strip() + "\n"
-                else:
-                    logger.error(f"Failed to generate iframe for: '{chart_title}' - get_visualization_iframe returned None/empty")
-                    # Don't inject error message - just remove the marker
+                report_with_markers = inject_response.content if hasattr(inject_response, 'content') else str(inject_response)
+
+                # Replace chart markers with actual iframe HTML
+                async def replace_marker(match):
+                    chart_title = match.group(1).strip()
+                    chart_info = tako_charts_map.get(chart_title)
+
+                    # Try case-insensitive match if exact match fails
+                    if not chart_info:
+                        for title, info in tako_charts_map.items():
+                            if title.lower() == chart_title.lower():
+                                chart_info = info
+                                break
+
+                    if not chart_info:
+                        logger.warning(f"Chart not found: {chart_title}")
+                        return ""
+
+                    iframe_html = await get_visualization_iframe(
+                        item_id=chart_info.get("card_id"),
+                        embed_url=chart_info.get("embed_url")
+                    )
+
+                    if iframe_html:
+                        iframe_only = re.sub(r'<script.*?</script>', '', iframe_html, flags=re.DOTALL)
+                        return "\n" + iframe_only.strip() + "\n"
                     return ""
 
-            # Find all chart markers and replace them asynchronously
-            chart_markers = list(re.finditer(r'\[TAKO_CHART:([^\]]+)\]', report))
-            logger.info(f"Found {len(chart_markers)} chart markers in report")
-            for marker in chart_markers:
-                logger.info(f"  Marker: [TAKO_CHART:{marker.group(1)}]")
+                # Find and replace all markers
+                markers = list(re.finditer(r'\[CHART:([^\]]+)\]', report_with_markers))
+                replacements = []
+                for match in markers:
+                    replacement = await replace_marker(match)
+                    replacements.append((match.start(), match.end(), replacement))
 
-            replacements = []
-            for match in chart_markers:
-                replacement = await replace_chart_marker_async(match)
-                replacements.append((match.start(), match.end(), replacement))
+                # Apply replacements in reverse order
+                processed_report = report_with_markers
+                for start, end, replacement in reversed(replacements):
+                    processed_report = processed_report[:start] + replacement + processed_report[end:]
 
-            # Apply replacements in reverse order to preserve positions
-            processed_report = report
-            for start, end, replacement in reversed(replacements):
-                processed_report = processed_report[:start] + replacement + processed_report[end:]
-
-            logger.info(f"Report processing complete. Embedded {len([r for r in replacements if '<iframe' in r[2]])} charts")
+                logger.info(f"Injected {len([r for r in replacements if r[2]])} charts into report")
 
             return Command(
                 goto="chat_node",

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -32,17 +32,10 @@ export function ResearchCanvas() {
     },
   });
 
-  // Maintain stable resources to prevent flickering during state updates
-  // Resources persist on screen even during intermediate state updates
-  const [stableResources, setStableResources] = useState<Resource[]>([]);
-
-  useEffect(() => {
-    // Update stable resources when new resources arrive
-    if (state.resources && state.resources.length > 0) {
-      setStableResources(state.resources);
-    }
-    // Keep existing resources displayed during transitions to prevent flickering
-  }, [state.resources]);
+  // Use state values directly - the agent state is the source of truth
+  const resources = state.resources || [];
+  const report = state.report || "";
+  const researchQuestion = state.research_question || "";
 
   useCoAgentStateRender({
     name: agent,
@@ -90,7 +83,7 @@ export function ResearchCanvas() {
             Delete these resources?
           </div>
           <Resources
-            resources={stableResources.filter((resource) =>
+            resources={resources.filter((resource) =>
               (args.urls || []).includes(resource.url)
             )}
             customWidth={200}
@@ -117,14 +110,9 @@ export function ResearchCanvas() {
     },
   });
 
-  // Use stable resources for display
-  const resources: Resource[] = stableResources;
-  const setResources = (resources: Resource[]) => {
-    setState({ ...state, resources });
-    setStableResources(resources);
+  const setResources = (newResources: Resource[]) => {
+    setState({ ...state, resources: newResources });
   };
-
-  // const [resources, setResources] = useState<Resource[]>(dummyResources);
   const [newResource, setNewResource] = useState<Resource>({
     url: "",
     title: "",
@@ -198,8 +186,8 @@ export function ResearchCanvas() {
             className="bg-background px-6 py-8 border-0 shadow-none rounded-xl text-md font-extralight min-h-[60px] flex items-center"
             aria-label="Research question"
           >
-            {state.research_question ? (
-              <p className="text-foreground">{state.research_question}</p>
+            {researchQuestion ? (
+              <p className="text-foreground">{researchQuestion}</p>
             ) : (
               <p className="text-slate-400">
                 The agent will automatically identify your research question from your query...
@@ -338,13 +326,15 @@ export function ResearchCanvas() {
           </div>
 
           {isViewMode ? (
-            <MarkdownRenderer content={state.report || ""} />
+            <MarkdownRenderer content={report || ""} />
           ) : (
             <Textarea
               data-test-id="research-draft"
               placeholder="Write your research draft here"
-              value={state.report || ""}
-              onChange={(e) => setState({ ...state, report: e.target.value })}
+              value={report || ""}
+              onChange={(e) => {
+                setState({ ...state, report: e.target.value });
+              }}
               rows={10}
               aria-label="Research draft"
               className="bg-background px-6 py-8 border-0 shadow-none rounded-xl text-md font-extralight focus-visible:ring-0 placeholder:text-slate-400"
