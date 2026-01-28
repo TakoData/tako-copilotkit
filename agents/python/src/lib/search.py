@@ -162,6 +162,30 @@ async def search_node(state: AgentState, config: RunnableConfig):
             state["logs"][log_index]["done"] = True
             await copilotkit_emit_state(config, state)
 
+        # RETRY LOGIC: If no Tako results found, retry with 2 additional web searches
+        if not tako_results and fast_questions:
+            logger.info("No Tako results found, retrying with web searches")
+            # Use up to 2 questions for web search fallback
+            fallback_queries = [q["question"] for q in fast_questions[:2]]
+
+            for query in fallback_queries:
+                state["logs"].append({"message": f"Tako Web Search: {query}", "done": False})
+            await copilotkit_emit_state(config, state)
+
+            fallback_tasks = [async_tavily_search(query) for query in fallback_queries]
+            fallback_results = await asyncio.gather(*fallback_tasks, return_exceptions=True)
+
+            for i, result in enumerate(fallback_results):
+                if isinstance(result, Exception):
+                    search_results.append({"error": str(result)})
+                else:
+                    search_results.append(result)
+                # Mark the fallback log as done
+                state["logs"][-(len(fallback_queries) - i)]["done"] = True
+                await copilotkit_emit_state(config, state)
+
+            logger.info(f"Fallback web search completed with {len([r for r in fallback_results if not isinstance(r, Exception)])} results")
+
         for i, q_obj in enumerate(deep_questions):
             log_index = num_tavily + len(fast_questions) + i
             question = q_obj["question"]

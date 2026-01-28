@@ -173,7 +173,6 @@ async def chat_node(
             Search,
             WriteReport,
             WriteResearchQuestion,
-            DeleteResources,
             GenerateDataQuestions,
         ],
         **ainvoke_kwargs,  # Pass the kwargs conditionally

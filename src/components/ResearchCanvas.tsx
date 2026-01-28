@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { ChevronDown } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -38,24 +38,29 @@ export function ResearchCanvas() {
   const [stableReport, setStableReport] = useState<string>("");
   const [stableResearchQuestion, setStableResearchQuestion] = useState<string>("");
 
+  // Refs to track previous values and prevent update loops
+  const prevReportRef = useRef<string>("");
+  const prevQuestionRef = useRef<string>("");
+
   useEffect(() => {
     // Update stable resources when new resources arrive
     if (state.resources && state.resources.length > 0) {
       setStableResources(state.resources);
     }
-    // Keep existing resources displayed during transitions to prevent flickering
   }, [state.resources]);
 
   useEffect(() => {
-    // Update stable report when new content arrives
-    if (state.report && state.report.length > 0) {
+    // Update stable report when new content arrives from agent (not user edits)
+    if (state.report && state.report !== prevReportRef.current) {
+      prevReportRef.current = state.report;
       setStableReport(state.report);
     }
   }, [state.report]);
 
   useEffect(() => {
     // Update stable research question when new content arrives
-    if (state.research_question && state.research_question.length > 0) {
+    if (state.research_question && state.research_question !== prevQuestionRef.current) {
+      prevQuestionRef.current = state.research_question;
       setStableResearchQuestion(state.research_question);
     }
   }, [state.research_question]);
@@ -362,6 +367,7 @@ export function ResearchCanvas() {
               value={stableReport || ""}
               onChange={(e) => {
                 const newValue = e.target.value;
+                prevReportRef.current = newValue;
                 setStableReport(newValue);
                 setState({ ...state, report: newValue });
               }}
