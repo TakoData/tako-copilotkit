@@ -6,6 +6,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "type-check": "tsc --noEmit",
     "dev": "concurrently -k -n ui,agent -c blue,red \"PORT=3000 npm run dev:ui\" \"PORT=2024 npm run dev:agent\"",
     "dev:ui": "next dev",
     "dev:agent": "cd agents/python && uv run main.py",
