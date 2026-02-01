@@ -63,7 +63,7 @@ async def async_tavily_search(query: str) -> Dict[str, Any]:
                 query=query,
                 search_depth="advanced",
                 include_answer=True,
-                max_results=10,
+                max_results=5,
             ),
         )
     except Exception as e:
@@ -99,7 +99,10 @@ async def search_node(state: AgentState, config: RunnableConfig):
         if ai_message.tool_calls and ai_message.tool_calls[0]["name"] == "Search":
             queries = ai_message.tool_calls[0]["args"].get("queries", [])[:MAX_WEB_SEARCHES]
         else:
-            queries = []  # No web search queries when coming from GenerateDataQuestions
+            # Use research question for web search when coming from GenerateDataQuestions
+            research_question = state.get("research_question", "")
+            queries = [research_question] if research_question else []
+            queries = queries[:MAX_WEB_SEARCHES]
 
         data_questions = state.get("data_questions", [])
 
