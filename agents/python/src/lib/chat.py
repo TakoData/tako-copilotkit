@@ -52,16 +52,34 @@ def GenerateDataQuestions(questions: List[DataQuestion]):  # pylint: disable=inv
     - 2-4 basic questions (search_effort='fast') for straightforward data lookups AND superlative/ranking queries
     - 0-1 prediction market questions (search_effort='deep') about forecasts, probabilities, or future outcomes
 
-    IMPORTANT - Include superlative/ranking queries (use fast search):
+    CRITICAL - Generate ATOMIC, non-compound queries:
+    - Each query should ask for ONE metric/dimension only
+    - NEVER combine multiple metrics in a single query (e.g., "compare X and Y", "X vs Y", "X and Y trends")
+    - Instead, split compound questions into separate atomic queries
+
+    BAD (compound):
+    - "Compare San Francisco fentanyl consumption and population"
+    - "China GDP vs inflation"
+    - "Unemployment and wage growth in the US"
+
+    GOOD (atomic):
+    - "San Francisco fentanyl consumption"
+    - "San Francisco population"
+    - "China GDP"
+    - "China inflation"
+    - "US unemployment rate"
+    - "US wage growth"
+
+    Superlative/ranking queries are fine (these are atomic):
     - "Which countries have the highest GDP per capita?"
     - "Which cities have the highest rent?"
-    - "What are the top 10 companies by market cap?"
+    - "Top 10 companies by market cap"
 
     Example:
     [
         {"question": "China GDP since 1960", "search_effort": "fast", "query_type": "basic"},
+        {"question": "China inflation rate", "search_effort": "fast", "query_type": "basic"},
         {"question": "Which countries have the highest inflation rates in 2024?", "search_effort": "fast", "query_type": "basic"},
-        {"question": "Compare exports for east asian countries", "search_effort": "fast", "query_type": "basic"},
         {"question": "What are prediction market odds for China invading Taiwan in 2025?", "search_effort": "deep", "query_type": "prediction_market"}
     ]
     """
@@ -144,18 +162,24 @@ async def chat_node(
     # Build dynamic prompt based on feature toggles
     if ENABLE_DEEP_QUERIES:
         data_questions_instructions = """2. THEN: Use GenerateDataQuestions to create 3-6 data-focused questions with varied complexity:
+               - Generate ATOMIC queries - each query asks for ONE metric/dimension only
                - 2-3 BASIC questions (fast search) for straightforward data: "Country X GDP 2020-2024"
                - 1-2 COMPLEX questions (deep search) for analytical insights
                - 0-1 PREDICTION MARKET question (deep search) if relevant: "What are prediction market odds for X in 2025?"
                - Use the entities, metrics, cohorts, and time periods listed in the knowledge base context above when available
                - Prefer exact entity/metric names from the knowledge base context for better search results"""
     else:
-        data_questions_instructions = """2. THEN: Use GenerateDataQuestions to create 3-5 data-focused questions:
-               - 2-4 BASIC questions (fast search) for data lookups, comparisons, AND superlative/ranking queries:
-                 * Data lookups: "Country X GDP 2020-2024"
-                 * Superlatives: "Which cities have the highest rent?", "Which countries have the lowest unemployment?"
-                 * Rankings: "Top 10 companies by market cap"
-                 * Comparisons: "Compare GDP growth of X vs Y"
+        data_questions_instructions = """2. THEN: Use GenerateDataQuestions to create 3-6 data-focused questions:
+               - Generate ATOMIC queries - each query asks for ONE metric/dimension only
+               - Instead, split compound questions into separate atomic queries
+               - Examples of GOOD atomic queries:
+                 * "US GDP 2020-2024" (single metric)
+                 * "US inflation rate" (single metric, separate query)
+                 * "Which countries have the highest rent?" (superlative - this is atomic)
+                 * "Top 10 companies by revenue" (ranking - this is atomic)
+               - Examples of BAD compound queries to AVOID:
+                 * "Compare US GDP and inflation" -> split into two queries
+                 * "San Francisco population vs rent" -> split into two queries
                - 0-1 PREDICTION MARKET question (deep search) if relevant: "What are prediction market odds for X in 2025?"
                - Use the entities, metrics, cohorts, and time periods listed in the knowledge base context above when available
                - Prefer exact entity/metric names from the knowledge base context for better search results"""
