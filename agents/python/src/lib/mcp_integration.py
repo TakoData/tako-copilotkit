@@ -278,7 +278,8 @@ async def _call_mcp_tool(tool_name: str, arguments: Dict[str, Any]) -> Any:
 async def search_knowledge_base(
     query: str,
     count: int = 5,
-    search_effort: str = "fast"
+    search_effort: str = "fast",
+    source_indexes: Optional[List[str]] = None
 ) -> List[Dict[str, Any]]:
     """
     Search the knowledge base via MCP server.
@@ -287,19 +288,25 @@ async def search_knowledge_base(
         query: Search query
         count: Number of results to return
         search_effort: Search effort level ('fast', 'medium', or 'deep')
+        source_indexes: Optional list of source indexes to search in priority order
+                       (e.g., ['tako'], ['web'], ['tako', 'web'])
 
     Returns:
         List of search results with metadata
     """
 
-    result = await _call_mcp_tool("knowledge_search", {
+    args = {
         "query": query,
         "api_token": TAKO_API_TOKEN,
         "count": count,
         "search_effort": search_effort,
         "country_code": "US",
         "locale": "en-US"
-    })
+    }
+    if source_indexes:
+        args["source_indexes"] = source_indexes
+
+    result = await _call_mcp_tool("knowledge_search", args)
 
     if result and "results" in result:
         formatted_results = []

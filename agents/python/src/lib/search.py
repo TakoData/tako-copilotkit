@@ -164,14 +164,16 @@ async def search_node(state: AgentState, config: RunnableConfig):
             fallback_tasks = []
             fallback_logs = []
 
-            # Fallback web searches for fast questions
+            # Fallback Tako web searches for fast questions
             if fast_questions:
-                logger.info("No Tako results found, falling back to web searches for Tako questions")
-                fallback_web_queries = [q["question"] for q in fast_questions[:2]]
-                for query in fallback_web_queries:
-                    fallback_logs.append(("web", query))
-                    state["logs"].append({"message": f"Fallback web search: {query}", "done": False})
-                fallback_tasks.extend([async_tavily_search(query) for query in fallback_web_queries])
+                logger.info("No Tako results found, falling back to Tako web index for questions")
+                for q_obj in fast_questions[:2]:
+                    fallback_logs.append(("tako_web", q_obj["question"]))
+                    state["logs"].append({"message": f"Tako web search: {q_obj['question']}", "done": False})
+                fallback_tasks.extend([
+                    search_knowledge_base(q["question"], search_effort="fast", source_indexes=["web"])
+                    for q in fast_questions[:2]
+                ])
 
             # Deep search for prediction market questions
             if prediction_market_questions:
@@ -192,13 +194,8 @@ async def search_node(state: AgentState, config: RunnableConfig):
                 for i, result in enumerate(fallback_results):
                     task_type, _ = fallback_logs[i]
                     if isinstance(result, Exception):
-                        if task_type == "web":
-                            search_results.append({"error": str(result)})
-                        else:
-                            tako_results.append({"error": str(result)})
-                    elif task_type == "web":
-                        search_results.append(result)
-                    elif result:  # deep Tako result
+                        tako_results.append({"error": str(result)})
+                    elif result:  # Tako result (web or deep)
                         # Add resources immediately for streaming
                         existing_urls = {r.get("url") for r in state["resources"]}
                         existing_titles = {r.get("title", "").lower() for r in state["resources"] if r.get("resource_type") == "tako_chart"}
