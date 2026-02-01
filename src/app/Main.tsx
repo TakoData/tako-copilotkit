@@ -13,8 +13,8 @@ const CHAT_SUGGESTIONS = [
     message: "Tell me about Vietnam's economy",
   },
   {
-    title: "Nvidia vs Intel",
-    message: "Compare the performance of Nvidia and Intel over the last 10 years",
+    title: "Amazon vs Walmart",
+    message: "Compare the performance of Amazon and Walmart over the last 10 years",
   },
   {
     title: "Commodities Prices",
@@ -25,12 +25,16 @@ const CHAT_SUGGESTIONS = [
     message: "What is the trend of global military spending since the Ukraine war started?",
   },
   {
-    title: "Performance of AI companies",
-    message: "How has the performance of AI company's stock prices and funding evolved since 2020 (also include traffic trends)?",
+    title: "Semiconductor Companies",
+    message: "How has the performance of semiconductor companies (like NVIDIA, AMD, TSMC, Intel) evolved since 2020 in terms of stock prices, revenue, and market share?",
   },
   {
     title: "Rent & Inflation",
     message: "How has the rent, inflation, and average wages trended in top US cities?",
+  },
+  {
+    title: "Crime & Public Health",
+    message: "How do crime rates (homicides, violent crime) and public health issues (fentanyl overdoses, drug use) correlate with population changes in major US cities like San Francisco, Chicago, and New York?",
   }
 ];
 
