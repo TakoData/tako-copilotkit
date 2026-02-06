@@ -1,4 +1,10 @@
+
+
 # Research Canvas with MCP Integration
+
+
+https://github.com/user-attachments/assets/bc32adb4-e4a7-492d-b5d6-34177cd1c216
+
 
 An AI-powered research assistant that combines data visualization with web search capabilities. Built with [CopilotKit](https://copilotkit.ai), [LangGraph](https://langchain-ai.github.io/langgraph/), and the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/).
 
